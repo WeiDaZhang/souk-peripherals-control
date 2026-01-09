@@ -13,22 +13,6 @@ class I2CDevice:
                 f"Failed to communicate with device at address {self.addr}: {e}"
             )
 
-    def _read_byte(self, register: int) -> int:
-        return self._bus.read_byte_data(self.addr, register)
-
-    def _write_byte(self, register: int, value: int) -> None:
-        self._bus.write_byte_data(self.addr, register, value)
-
-    def _read_block(self, register: int, length: int) -> list:
-        return self._bus.read_i2c_block_data(self.addr, register, length)
-
-    def _write_block(self, register: int, data: list) -> None:
-        try:
-            data = [int(byte) for byte in data]
-        except ValueError:
-            raise ValueError("All elements in data must be integers.")
-        self._bus.write_i2c_block_data(self.addr, register, data)
-
     def read(self, length: int = 1, register: int = None) -> list:
         if length == 1:
             if register is None:
