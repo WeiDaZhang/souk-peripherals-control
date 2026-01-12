@@ -1,5 +1,5 @@
 from typing import Literal
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from i2c_devices import I2CDevice
 
 
@@ -21,7 +21,7 @@ class LTC2481CDDConfig:
             raise ValueError("2x speed (spd) must be a boolean.")
 
     @property
-    def gain(self) -> int:
+    def gain(self) -> float:
         if self.spd:
             return 2**self.gs
         else:
@@ -79,8 +79,7 @@ class LTC2481CDDOUT:
         self.signal = LTC2481CDDSignal(**data_dict["signal"])
         self.config = data_dict["config"]
 
-    @staticmethod
-    def parse_raw(raw24, v_reference: float = 5.0) -> dict:
+    def parse_raw(self) -> dict:
         """
         Bit mapping (MSb -> LSb):
            bit23: SGN
@@ -100,10 +99,10 @@ class LTC2481CDDOUT:
         T_SLOPE = 0.0014  # V/°C
 
         # extract sign (bit22)
-        sign = (raw24 >> SIG_BIT) & 0x1
-        overflow = (raw24 >> MSB_BIT) & 0x1 == sign
+        sign = (self.raw24 >> SIG_BIT) & 0x1
+        overflow = (self.raw24 >> MSB_BIT) & 0x1 == sign
         # extract 16-bit measurement (bits 21..6)
-        magnitude = (raw24 >> LSB_BIT) & (2 ** (MSB_BIT - LSB_BIT) - 1)  # 16 bits
+        magnitude = (self.raw24 >> LSB_BIT) & (2 ** (MSB_BIT - LSB_BIT) - 1)  # 16 bits
         # signed conversion: sign bit indicates negative (two's complement-like handling)
         # Interpret as signed 16-bit magnitude with separate sign bit:
         if sign == 1:
@@ -112,18 +111,18 @@ class LTC2481CDDOUT:
             signed = magnitude - (1 << (MSB_BIT - LSB_BIT))  # negative value
 
         # extract PG2..PG0 (bits5..3)
-        pg = (raw24 >> PG_BITS[1]) & PG_BITS[0]
+        pg = (self.raw24 >> PG_BITS[1]) & PG_BITS[0]
         # IM (bit1), SPD (bit0)
-        im = (raw24 >> IM_BIT) & 0x1
-        spd = (raw24 >> SPD_BIT) & 0x1
+        im = (self.raw24 >> IM_BIT) & 0x1
+        spd = (self.raw24 >> SPD_BIT) & 0x1
 
         config = LTC2481CDDConfig(gs=pg, im=bool(im), spd=bool(spd))  # validate config
         if config.im:
             value = (
-                signed / 2 ** (MSB_BIT - LSB_BIT) * v_reference / T_SLOPE
+                signed / 2 ** (MSB_BIT - LSB_BIT) * self.v_reference / T_SLOPE
             )  # temp mode
         else:
-            value = signed / 2 ** (MSB_BIT - LSB_BIT) * (v_reference / config.gain)
+            value = signed / 2 ** (MSB_BIT - LSB_BIT) * (self.v_reference / config.gain)
 
         return {
             "signal": {
@@ -144,7 +143,7 @@ class LTC2481CDD(I2CDevice):
         i2c_bus,
         ca0: Literal["high", "float"],
         ca1: Literal["high", "float", "low"],
-        reference: dict[
+        references: dict[
             bool, float
         ],  # {True: 5.0 in volts (ref+), False: 2.5 in volts (ref-)}
         v_operation: float = 5,
@@ -164,37 +163,122 @@ class LTC2481CDD(I2CDevice):
                 dev_addr = 0x27
             case _:
                 raise ValueError(f"Invalid combination of ca1={ca1} and ca0={ca0}")
-        self.addr_pins = {"ca0": ca0, "ca1": ca1}
+        self._ca0 = ca0
+        self._ca1 = ca1
         if (
-            isinstance(reference, dict)
-            and all((True in reference, False in reference))
-            and all(v_operation > v > 0 for v in reference.values())
+            isinstance(references, dict)
+            and all((True in references, False in references))
+            and all(v_operation > v > 0 for v in references.values())
         ):
-            self.v_operation = v_operation
-            self.v_reference = reference[True] - reference[False]
-            self.reference = reference
+            self._v_oper = v_operation
+            self._v_ref = references[True] - references[False]
+            self._refs = references
         else:
-            raise ValueError(f"Invalid reference voltage configuration: {reference}.")
+            raise ValueError(f"Invalid reference voltage configuration: {references}.")
         super().__init__(dev_name, i2c_bus, dev_addr)
-        self.config = LTC2481CDDConfig()  # default config
+        self._config = LTC2481CDDConfig()  # default config
+        self._write_config()  # write default config to device
 
-    def get_config(self) -> dict:
-        return {
-            "ca0": self.addr_pins["ca0"],
-            "ca1": self.addr_pins["ca1"],
-            "reference": self.reference,
-            "config": asdict(self.config),
-        }
+    # Fixed properties
+    @property
+    def addr_pin_ca0(self) -> Literal["high", "float"]:
+        return self._ca0
 
-    def write_config(self, **kwargs):
+    @property
+    def addr_pin_ca1(self) -> Literal["high", "float", "low"]:
+        return self._ca1
+
+    @property
+    def dev_addr(self) -> int:
+        return self.addr
+
+    @property
+    def v_operation(self) -> float:
+        return self._v_oper
+
+    @property
+    def v_reference(self) -> float:
+        return self._v_ref
+
+    @property
+    def references(self) -> dict[bool, float]:
+        return self._refs
+
+    # Configurable properties
+    @property
+    def intra_meas(self) -> bool:
+        return self._config.im
+
+    @intra_meas.setter
+    def intra_meas(self, value: bool):
+        if not isinstance(value, bool):
+            raise ValueError("intra_meas must be a boolean value")
+        self._write_config(im=value)
+
+    @property
+    def speed_2x(self) -> bool:
+        return self._config.spd
+
+    @speed_2x.setter
+    def speed_2x(self, value: bool):
+        if not isinstance(value, bool):
+            raise ValueError("speed_2x must be a boolean value")
+        self._write_config(spd=value)
+
+    @property
+    def gain_setting(self) -> float:
+        return self._config.gain
+
+    @gain_setting.setter
+    def gain_setting(self, value: float):
+        if self.speed_2x:
+            if value not in 2 ** range(8):
+                raise ValueError(
+                    "gain_setting must be one of 1,2,4,8,16,32,64,128 for 2x speed"
+                )
+            gs = {v: k for k, v in zip(range(8), 2 ** range(8))}[value]
+        else:
+            if value not in [1] + [2 ** (k + 1) for k in range(1, 8)]:
+                raise ValueError(
+                    "gain_setting must be one of 1,4,8,16,32,64,128,256 for normal speed"
+                )
+            gs = {
+                v: k
+                for k, v in zip(range(8), [1] + [2 ** (k + 1) for k in range(1, 8)])
+            }[value]
+        self._write_config(gain=gs)
+
+    @property
+    def rejection_mode(self) -> Literal[0, 1, 2]:
+        return self._config.rm
+
+    @rejection_mode.setter
+    def rejection_mode(self, value: Literal[0, 1, 2]):
+        if value not in (0, 1, 2):
+            raise ValueError("rejection_mode must be 0, 1, or 2")
+        self._write_config(rm=value)
+
+    def _write_config(self, **kwargs):
         for key, value in kwargs.items():
-            if hasattr(self.config, key):
-                setattr(self.config, key, value)
+            if hasattr(self._config, key):
+                setattr(self._config, key, value)
             else:
                 raise KeyError(f"Invalid configuration key: {key}")
-        self.write(self.config.config_byte)
+        self.write(self._config.config_byte)
 
     def read_data(self) -> LTC2481CDDOUT:
         raw_data = self.read(length=3)
         raw24 = (raw_data[0] << 16) | (raw_data[1] << 8) | raw_data[2]
         return LTC2481CDDOUT(raw24=raw24, v_reference=self.v_reference)
+
+    def read_voltage(self) -> float:
+        if self.intra_meas:
+            self.intra_meas = False  # switch to voltage mode if in temp mode
+        data_out = self.read_data()
+        return data_out.signal["value"]
+
+    def read_temperature(self) -> float:
+        if not self.intra_meas:
+            self.intra_meas = True  # switch to temp mode if in voltage mode
+        data_out = self.read_data()
+        return data_out.signal["value"]
