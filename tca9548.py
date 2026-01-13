@@ -21,7 +21,9 @@ class ChannelConfig:
 
     def __post_init__(self):
         if not (0 <= self.config_byte <= (1 << self._n_channels) - 1):
-            raise ValueError(f"config_byte must be between 0 and {(1 << self._n_channels) - 1}")
+            raise ValueError(
+                f"config_byte must be between 0 and {(1 << self._n_channels) - 1}"
+            )
         self.channels: dict[int, bool] = {}
         for bit in range(self._n_channels):
             self.channels[bit] = bool((self.config_byte >> bit) & 0x01)
@@ -33,7 +35,9 @@ class ChannelConfig:
     @config_byte.setter
     def config_byte(self, value: int):
         if not (0 <= value <= (1 << self._n_channels) - 1):
-            raise ValueError(f"config_byte must be between 0 and {(1 << self._n_channels) - 1}")
+            raise ValueError(
+                f"config_byte must be between 0 and {(1 << self._n_channels) - 1}"
+            )
         self._config_byte = value
         for bit in range(self._n_channels):
             self.channels[bit] = bool((self._config_byte >> bit) & 0x01)

@@ -4,6 +4,13 @@ from i2c_devices import I2CDevice
 
 
 @dataclass(frozen=True)
+class AD511_0_2_4BCPZ_5_10_80HWConfig:
+    RESOLUTION: Literal[32, 64, 128]
+    R_FULL_SCALE_KOHM: Literal[5, 10, 80]
+    DEV_ADDR: Literal[0x2C, 0x2F]
+
+
+@dataclass(frozen=True)
 class AD511_0_2_4BCPZ_5_10_80CMD:
     UPDATE_EEPROM_CMD: int = 0x01
     WRITE_RDAC_CMD: int = 0x02
@@ -45,7 +52,9 @@ class AD511_0_2_4BCPZ_5_10_80DOUT:
            bit0:   applicapable for res = 128 only
         """
 
-        value = (self.raw8 >> self.LSB_BIT) & ((1 << (self.MSB_BIT - self.LSB_BIT + 1)) - 1)
+        value = (self.raw8 >> self.LSB_BIT) & (
+            (1 << (self.MSB_BIT - self.LSB_BIT + 1)) - 1
+        )
         if (value < 0 or value > self.res) and (value != 0xFF):
             raise ValueError("Invalid RDAC value for the specified resolution.")
         r_wb = value / self.res * self.r_ab + self.r_w
@@ -105,6 +114,11 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
 
     @r_ab.setter
     def r_ab(self, value: float):
+        """
+        Setting the total resistance between terminals A and B after calibration.
+        Allows actual r_ab to be set to a value different from the nominal full scale resistance.
+        SHOULD BE CALIBRATED CAREFULLY TO AVOID ERRORS IN RESISTANCE VALUES.
+        """
         if value <= 0:
             raise ValueError("r_ab must be a positive value.")
         self._r_ab = value
@@ -115,6 +129,10 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
 
     @r_bs.setter
     def r_bs(self, value: float):
+        """
+        Setting the bottom scale resistance after calibration.
+        SHOULD BE CALIBRATED CAREFULLY TO AVOID ERRORS IN RESISTANCE VALUES.
+        """
         if value < 0:
             raise ValueError("r_bs must be a non-negative value.")
         self._r_bs = value
@@ -125,6 +143,10 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
 
     @r_ts.setter
     def r_ts(self, value: float):
+        """
+        Setting the top scale resistance after calibration.
+        SHOULD BE CALIBRATED CAREFULLY TO AVOID ERRORS IN RESISTANCE VALUES.
+        """
         if value < 0:
             raise ValueError("r_ts must be a non-negative value.")
         self._r_ts = value
@@ -135,6 +157,10 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
 
     @r_w.setter
     def r_w(self, value: float):
+        """
+        Setting the wiper resistance after calibration.
+        SHOULD BE CALIBRATED CAREFULLY TO AVOID ERRORS IN RESISTANCE VALUES.
+        """
         if value < 0:
             raise ValueError("r_w must be a non-negative value.")
         self._r_w = value
@@ -154,7 +180,9 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
     @r_aw.setter
     def r_aw(self, value: float):
         if value < self.r_w or value > (self.r_ab + self.r_w):
-            raise ValueError(f"r_aw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm.")
+            raise ValueError(
+                f"r_aw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
+            )
         tap_pos = round((1 - (value - self.r_w) / self.r_ab) * self.resolution)
         self.write_tap_pos(tap_pos)
 
@@ -173,7 +201,9 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
     @r_bw.setter
     def r_bw(self, value: float):
         if value < self.r_w or value > (self.r_ab + self.r_w):
-            raise ValueError(f"r_bw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm.")
+            raise ValueError(
+                f"r_bw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
+            )
         tap_pos = round((value - self.r_w) / self.r_ab * self.resolution)
         self.write_tap_pos(tap_pos)
 
