@@ -45,9 +45,7 @@ class AD511_0_2_4BCPZ_5_10_80DOUT:
            bit0:   applicapable for res = 128 only
         """
 
-        value = (self.raw8 >> self.LSB_BIT) & (
-            (1 << (self.MSB_BIT - self.LSB_BIT + 1)) - 1
-        )
+        value = (self.raw8 >> self.LSB_BIT) & ((1 << (self.MSB_BIT - self.LSB_BIT + 1)) - 1)
         if (value < 0 or value > self.res) and (value != 0xFF):
             raise ValueError("Invalid RDAC value for the specified resolution.")
         r_wb = value / self.res * self.r_ab + self.r_w
@@ -99,10 +97,6 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
     @property
     def r_full_scale_kOhm(self) -> int:
         return self._r_full_scale_kOhm
-
-    @property
-    def dev_addr(self) -> int:
-        return self.addr
 
     # Configurable properties
     @property
@@ -160,9 +154,7 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
     @r_aw.setter
     def r_aw(self, value: float):
         if value < self.r_w or value > (self.r_ab + self.r_w):
-            raise ValueError(
-                f"r_aw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
-            )
+            raise ValueError(f"r_aw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm.")
         tap_pos = round((1 - (value - self.r_w) / self.r_ab) * self.resolution)
         self.write_tap_pos(tap_pos)
 
@@ -181,9 +173,7 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
     @r_bw.setter
     def r_bw(self, value: float):
         if value < self.r_w or value > (self.r_ab + self.r_w):
-            raise ValueError(
-                f"r_bw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
-            )
+            raise ValueError(f"r_bw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm.")
         tap_pos = round((value - self.r_w) / self.r_ab * self.resolution)
         self.write_tap_pos(tap_pos)
 
