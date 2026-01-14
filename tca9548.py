@@ -92,10 +92,14 @@ class TCA9548(I2CDevice):
         self.update_channel_config()
         return self.channel_config
 
-    def turn_off_channel(self, channel: int) -> ChannelConfig:
-        if not (0 <= channel <= 7):
+    def turn_off_channel(self, channel: int = None) -> ChannelConfig:
+        """If channel is None, turn off all channels."""
+        if channel is None:
+            new_config_byte = ChannelConfig(0).config_byte
+        elif not (0 <= channel <= 7):
             raise ValueError("channel must be between 0 and 7")
-        new_config_byte = self.channel_config.config_byte & ~(1 << channel)
+        else:
+            new_config_byte = self.channel_config.config_byte & ~(1 << channel)
         self.write(new_config_byte)
         self.update_channel_config()
         return self.channel_config

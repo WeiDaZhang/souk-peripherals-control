@@ -17,7 +17,10 @@ DEV_ADDRS = {
 class LTC2481CDDHWConfig:
     CA0: Literal["low", "float", "high"]
     CA1: Literal["low", "float", "high"]
-    REFERENCES: dict[bool, float]  # {True: Vref+, False: Vref-}
+    REFERENCES: dict[bool, float] = {
+        True: 5.0,
+        False: 0.0,
+    }  # {True: Vref+, False: Vref-}
     V_OPERATION: float = 5.0  # in volts
 
 

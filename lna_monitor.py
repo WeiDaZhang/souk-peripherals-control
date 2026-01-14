@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from smbus2 import SMBus
 
+from lna_voltages_utils import parallel_resistance, reverse_parallel_resistance
 from ad511_0_2_4bcpz_5_10_80 import (
     AD511_0_2_4BCPZ_5_10_80,
     AD511_0_2_4BCPZ_5_10_80HWConfig,
@@ -14,12 +15,17 @@ class LNAMonitorHWConfig:
     r_dac_hw_config: AD511_0_2_4BCPZ_5_10_80HWConfig
     remote_adc_hw_config: LTC2481CDDHWConfig
     imonitor_adc_hw_config: LTC2481CDDHWConfig
-    r_RTop1_kOhm: float = 10.0  # switched resistor
-    r_RBot1_kOhm: float = 15.0  # fixed resistor
-    r_RAdj1_kOhm: float = 10.0  # parallel resistor to the digital potentiometer
-    r_LDO_set_kOhm: float = 100.0  # Set resistor for LDO on source
-    r_RSENSE_OHMS: float = 1.0  # Sense resistor for Imonitor
+    switch_status: bool = True  # True = ON (short), False = OFF (open)
+    r_RTop1_kOhm: float = 2.7  # switched resistor
+    r_RBot1_kOhm: float = 20.0  # fixed resistor
+    r_RAdj1_kOhm: float = 18.0  # parallel resistor to the digital potentiometer
+    r_LDO_set_kOhm: float = 82.0  # Set resistor for LDO on source
+    r_RSENSE_OHMS: float = 100.0  # Sense resistor for Imonitor
     i_set_LDO: float = 0.1e-3  # 100 µA set current for LDO on source (MUST NOT CHANGE)
+
+    def __post_init__(self):
+        if self.i_set_LDO != 0.1e-3:
+            raise ValueError("i_set_LDO must NOT be changed.")
 
 
 class LNAMonitor:
@@ -49,29 +55,34 @@ class LNAMonitor:
         )
         self._hw_config = hw_config
 
-    def _parallel_resistance(self, r1: float, r2: float) -> float:
-        return (r1 * r2) / (r1 + r2)
-
-    def _reverse_parallel_resistance(self, r_eq: float, r1: float) -> float:
-        return (r_eq * r1) / (r1 - r_eq)
+    @property
+    def get_local_voltage_range(self) -> tuple[float, float]:
+        """Calculates the achievable local voltage range based on the hardware configuration.
+        Returns:
+            tuple[float, float]: (min_voltage, max_voltage) in volts.
+        """
+        v_min = self._r_dac_r_aw_to_local_voltage(self._r_dac.r_aw_range[0])
+        v_max = self._r_dac_r_aw_to_local_voltage(self._r_dac.r_aw_range[1])
+        return (v_min, v_max)
 
     def _local_voltage_to_r_dac_r_aw(self, v_local: float) -> float:
-        return self._reverse_parallel_resistance(
-            self._reverse_parallel_resistance(
+        return reverse_parallel_resistance(
+            reverse_parallel_resistance(
                 v_local / self._hw_config.i_set_LDO,
                 self._hw_config.r_LDO_set_kOhm * 1000,
             )
             - self._hw_config.r_RTop1_kOhm * 1000
-            - self._hw_config.r_RBot1_kOhm * 1000,
+            if not self._hw_config.switch_status
+            else 0 - self._hw_config.r_RBot1_kOhm * 1000,
             self._hw_config.r_RAdj1_kOhm * 1000,
         )
 
     def _r_dac_r_aw_to_local_voltage(self, r_aw: float) -> float:
-        r_paral = self._parallel_resistance(r_aw, self._hw_config.r_RAdj1_kOhm * 1000)
-        r_total = self._parallel_resistance(
-            r_paral
-            + self._hw_config.r_RTop1_kOhm * 1000
-            + self._hw_config.r_RBot1_kOhm * 1000,
+        r_paral = parallel_resistance(r_aw, self._hw_config.r_RAdj1_kOhm * 1000)
+        r_total = parallel_resistance(
+            r_paral + self._hw_config.r_RTop1_kOhm * 1000
+            if not self._hw_config.switch_status
+            else 0 + self._hw_config.r_RBot1_kOhm * 1000,
             self._hw_config.r_LDO_set_kOhm * 1000,
         )
         return self._hw_config.i_set_LDO * r_total

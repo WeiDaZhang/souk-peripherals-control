@@ -2,7 +2,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def v_source(r_switched, r_fixed, r_paral, switch_state, r_pot, i_set=1e-4):
+def parallel_resistance(r1: float, r2: float) -> float:
+    return (r1 * r2) / (r1 + r2)
+
+
+def reverse_parallel_resistance(r_eq: float, r1: float) -> float:
+    return (r_eq * r1) / (r1 - r_eq)
+
+
+def v_source(r_ldo_set, r_switched, r_fixed, r_paral, switch_state, r_pot, i_set=1e-4):
     """
     r_set: list or array of 3 fixed resistances [R1, R2, R3]
     switch_state: boolean, True if the switch is closed, False if open
@@ -10,10 +18,11 @@ def v_source(r_switched, r_fixed, r_paral, switch_state, r_pot, i_set=1e-4):
     i_set: float, set current of the LDO, default is 100 µA
     Returns the source voltage based on the configuration.
     """
-    return i_set * (
+    return i_set * parallel_resistance(
         (0 if switch_state else r_switched)
         + r_fixed
-        + r_paral * r_pot / (r_paral + r_pot)
+        + parallel_resistance(r_paral, r_pot),
+        r_ldo_set,
     )
 
 
@@ -29,9 +38,10 @@ def v_remote(v_source, r_meas, r_highside, r_lowside, i_meas):
 
 def main():
     # Fixed resistances
-    r_switched = 2500  # Ohms
-    r_fixed = 15000  # Ohms
-    r_highside = 60  # Ohms
+    r_LDO_set = 82000  # Ohms
+    r_switched = 2700  # Ohms
+    r_fixed = 20000  # Ohms
+    r_highside = 30  # Ohms
     r_lowside = 30  # Ohms
     i_meas = 4e-3  # 4 mA
     r_meas = 100  # 1 kOhm DUT
@@ -40,7 +50,7 @@ def main():
     r_pot_values = np.linspace(0, 10000, 128)  # 0 to 10k Ohms
 
     # R parallel resistance is the secondary variable
-    r_paral_values = np.array([10000])  # np.linspace(10000, 20000, 5)  # Ohms
+    r_paral_values = np.array([18000])  # np.linspace(10000, 20000, 5)  # Ohms #
 
     v_source_closed_list = []
     v_source_open_list = []
@@ -48,8 +58,12 @@ def main():
     v_remote_open_list = []
     # Calculate voltages for each potentiometer value
     for r_paral in r_paral_values:
-        v_source_closed = v_source(r_switched, r_fixed, r_paral, True, r_pot_values)
-        v_source_open = v_source(r_switched, r_fixed, r_paral, False, r_pot_values)
+        v_source_closed = v_source(
+            r_LDO_set, r_switched, r_fixed, r_paral, True, r_pot_values
+        )
+        v_source_open = v_source(
+            r_LDO_set, r_switched, r_fixed, r_paral, False, r_pot_values
+        )
         v_remote_closed = v_remote(
             v_source_closed, r_meas, r_highside, r_lowside, i_meas
         )
