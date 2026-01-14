@@ -9,7 +9,9 @@ class I2CDevice:
         try:
             self._bus.read_byte(self.addr)
         except Exception as e:
-            raise ConnectionError(f"Failed to communicate with device at address {self.addr}: {e}")
+            raise ConnectionError(
+                f"Failed to communicate with device at address {self.addr}: {e}"
+            )
 
     @property
     def dev_addr(self) -> int:

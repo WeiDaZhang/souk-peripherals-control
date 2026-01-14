@@ -1,5 +1,5 @@
-from typing import Literal
-from dataclasses import dataclass
+from typing import Literal, Dict
+from dataclasses import dataclass, field
 from i2c_devices import I2CDevice
 
 DEV_ADDRS = {
@@ -17,10 +17,12 @@ DEV_ADDRS = {
 class LTC2481CDDHWConfig:
     CA0: Literal["low", "float", "high"]
     CA1: Literal["low", "float", "high"]
-    REFERENCES: dict[bool, float] = {
-        True: 5.0,
-        False: 0.0,
-    }  # {True: Vref+, False: Vref-}
+    REFERENCES: Dict[bool, float] = field(
+        default_factory=lambda: {
+            True: 5.0,
+            False: 0.0,
+        }  # {True: Vref+, False: Vref-}
+    )
     V_OPERATION: float = 5.0  # in volts
 
 
@@ -70,10 +72,7 @@ class LTC2481CDDConfig:
         RM_BITS = (0x03, 1)  # mask, shift
         SPD_BIT = 0
         byte = (
-            (self.gs << GS_BITS[1])
-            | (int(self.im) << IM_BIT)
-            | (int(self.spd) << SPD_BIT)
-            | (self.rm << RM_BITS[1])
+            (self.gs << GS_BITS[1]) | (int(self.im) << IM_BIT) | (int(self.spd) << SPD_BIT) | (self.rm << RM_BITS[1])
         ) & 0xFF
         return byte
 
@@ -139,9 +138,7 @@ class LTC2481CDDOUT:
 
         config = LTC2481CDDConfig(gs=pg, im=bool(im), spd=bool(spd))  # validate config
         if config.im:
-            value = (
-                signed / 2 ** (MSB_BIT - LSB_BIT) * self.v_reference / T_SLOPE
-            )  # temp mode
+            value = signed / 2 ** (MSB_BIT - LSB_BIT) * self.v_reference / T_SLOPE  # temp mode
         else:
             value = signed / 2 ** (MSB_BIT - LSB_BIT) * (self.v_reference / config.gain)
 
@@ -164,9 +161,7 @@ class LTC2481CDD(I2CDevice):
         i2c_bus,
         ca0: Literal["high", "float", "low"],
         ca1: Literal["high", "float", "low"],
-        references: dict[
-            bool, float
-        ],  # {True: 5.0 in volts (ref+), False: 2.5 in volts (ref-)}
+        references: Dict[bool, float],  # {True: 5.0 in volts (ref+), False: 2.5 in volts (ref-)}
         v_operation: float = 5,
     ):
         dev_addr = DEV_ADDRS.get((ca1, ca0), None)
@@ -206,7 +201,7 @@ class LTC2481CDD(I2CDevice):
         return self._v_ref
 
     @property
-    def references(self) -> dict[bool, float]:
+    def references(self) -> Dict[bool, float]:
         return self._refs
 
     # Configurable properties
@@ -238,19 +233,12 @@ class LTC2481CDD(I2CDevice):
     def gain_setting(self, value: float):
         if self.speed_2x:
             if value not in 2 ** range(8):
-                raise ValueError(
-                    "gain_setting must be one of 1,2,4,8,16,32,64,128 for 2x speed"
-                )
+                raise ValueError("gain_setting must be one of 1,2,4,8,16,32,64,128 for 2x speed")
             gs = {v: k for k, v in zip(range(8), 2 ** range(8))}[value]
         else:
             if value not in [1] + [2 ** (k + 1) for k in range(1, 8)]:
-                raise ValueError(
-                    "gain_setting must be one of 1,4,8,16,32,64,128,256 for normal speed"
-                )
-            gs = {
-                v: k
-                for k, v in zip(range(8), [1] + [2 ** (k + 1) for k in range(1, 8)])
-            }[value]
+                raise ValueError("gain_setting must be one of 1,4,8,16,32,64,128,256 for normal speed")
+            gs = {v: k for k, v in zip(range(8), [1] + [2 ** (k + 1) for k in range(1, 8)])}[value]
         self._write_config(gain=gs)
 
     @property

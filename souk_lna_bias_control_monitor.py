@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import List, Literal, Dict, Tuple, Union
 from dataclasses import dataclass
 
 from smbus2 import SMBus
@@ -28,13 +28,13 @@ REFDES_LNA_MONITOR_CHN_MAP = {
 SWITCH_ADDR_RESISTOR_MAP = {
     "root": {
         "A0": {"R8": "high", "R10": "low"},
-        "A1": {"R7": "high", "R5": "low"},
-        "A2": {"R6": "high", "R4": "low"},
+        "A1": {"R5": "high", "R7": "low"},
+        "A2": {"R4": "high", "R6": "low"},
     },
     "leaf": {
-        "A0": {"R15": "high", "R14": "low"},
-        "A1": {"R13": "high", "R11": "low"},
-        "A2": {"R12": "high", "R9": "low"},
+        "A0": {"R14": "high", "R15": "low"},
+        "A1": {"R11": "high", "R13": "low"},
+        "A2": {"R9": "high", "R12": "low"},
     },
 }
 
@@ -43,7 +43,7 @@ ROOT_LEAF_CONN = 7
 
 @dataclass(frozen=True)
 class SOUKLNABiasControlMonitorHWConfig:
-    lna_monitor_hw_configs: dict[str, LNAMonitorHWConfig | None]
+    lna_monitor_hw_configs: Dict[str, Union[LNAMonitorHWConfig, None]]
     r9_r12: Literal["R9", "R12"]  # resistor selection for i2c address
     r8_r10: Literal["R8", "R10"]  # resistor selection for i2c address
     r7_r5: Literal["R7", "R5"]  # resistor selection for i2c address
@@ -90,14 +90,6 @@ class SOUKLNABiasControlMonitorHWConfig:
 
 class SOUKLNABiasControlMonitor:
     def __init__(self, i2c_bus: SMBus, hw_config: SOUKLNABiasControlMonitorHWConfig):
-        self._lna_monitors: dict[str, LNAMonitor | None] = {}
-        for refdes, lna_hw_config in hw_config.lna_monitor_hw_configs.items():
-            if lna_hw_config is not None:
-                self._lna_monitors[refdes] = LNAMonitor(
-                    i2c_bus=i2c_bus, hw_config=lna_hw_config
-                )
-            else:
-                self._lna_monitors[refdes] = None
         self._root_switch = TCA9548(
             dev_name="root_switch",
             i2c_bus=i2c_bus,
@@ -115,15 +107,27 @@ class SOUKLNABiasControlMonitor:
             a2=SWITCH_ADDR_RESISTOR_MAP["leaf"]["A2"][hw_config.r9_r12],
         )
         self._leaf_switch.turn_off_channel()
+        self._lna_monitors: Dict[str, Union[LNAMonitor, None]] = {}
+        for refdes, lna_hw_config in hw_config.lna_monitor_hw_configs.items():
+            if lna_hw_config is not None:
+                self._turn_on_channel(
+                    list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]
+                )
+                self._lna_monitors[refdes] = LNAMonitor(
+                    i2c_bus=i2c_bus, hw_config=lna_hw_config
+                )
+                self._turn_off_all_channels()
+            else:
+                self._lna_monitors[refdes] = None
         self._hw_config = hw_config
 
     @property
-    def lna_local_voltage_ranges(self) -> dict[int, tuple[float, float]]:
+    def lna_local_voltage_ranges(self) -> Dict[int, Tuple[float, float]]:
         """Gets the achievable local voltage ranges for all LNAs.
         Returns:
             dict[int, tuple[float, float]]: The local voltage ranges as {chn: (min_voltage, max_voltage)}.
         """
-        voltage_ranges: dict[int, tuple[float, float]] = {}
+        voltage_ranges: Dict[int, Tuple[float, float]] = {}
         for refdes, lna_monitor in self._lna_monitors.items():
             chn = list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]
             if lna_monitor is None:
@@ -134,8 +138,8 @@ class SOUKLNABiasControlMonitor:
 
     def read_lna_status(
         self,
-        chn: int | list[int],
-    ) -> dict[int, dict[str, float]]:
+        chn: Union[int, List[int]],
+    ) -> Dict[int, Dict[str, float]]:
         """Reads the local voltage based on the current DAC resistance.
         Args:
             chn (int): The channel number (1-14), or
@@ -151,7 +155,7 @@ class SOUKLNABiasControlMonitor:
                 for chn_map in list(REFDES_LNA_MONITOR_CHN_MAP.values())
             ]:
                 raise ValueError(f"Invalid channel number: {c}")
-        status: dict[int, dict[str, float]] = {}
+        status: Dict[int, Dict[str, float]] = {}
         for c in chn:
             refdes = next(
                 key
@@ -176,8 +180,8 @@ class SOUKLNABiasControlMonitor:
         return status
 
     def set_lna_bias_local(
-        self, chn: int | list[int], v_local: float
-    ) -> dict[int, float]:
+        self, chn: Union[int, List[int]], v_local: float
+    ) -> Dict[int, float]:
         """Calculates and sets the DAC resistance to achieve the desired local voltage.
         Args:
             chn (int): The channel number (1-14), or
@@ -194,7 +198,7 @@ class SOUKLNABiasControlMonitor:
                 for chn_map in list(REFDES_LNA_MONITOR_CHN_MAP.values())
             ]:
                 raise ValueError(f"Invalid channel number: {c}")
-        actual_v_locals: dict[int, float] = {}
+        actual_v_locals: Dict[int, float] = {}
         for c in chn:
             refdes = next(
                 key
@@ -238,7 +242,9 @@ class SOUKLNABiasControlMonitor:
         else:
             raise ValueError(f"Invalid channel number: {chn}")
 
-    def _turn_off_all_channels(self, except_chn: int | None = ROOT_LEAF_CONN) -> None:
+    def _turn_off_all_channels(
+        self, except_chn: Union[int, None] = ROOT_LEAF_CONN
+    ) -> None:
         self._leaf_switch.turn_off_channel()
         self._root_switch.turn_off_channel()
         if except_chn is not None:
@@ -248,7 +254,7 @@ class SOUKLNABiasControlMonitor:
 def main():
     import time
 
-    i2c_bus = SMBus(1)
+    i2c_bus = SMBus(0)
 
     hw_config = SOUKLNABiasControlMonitorHWConfig(
         lna_monitor_hw_configs={
@@ -353,7 +359,7 @@ def main():
             ),
         },
         r9_r12="R12",
-        r8_r10="R8",
+        r8_r10="R10",
         r7_r5="R7",
         r11_r13="R13",
         r14_r15="R14",

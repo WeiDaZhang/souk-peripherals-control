@@ -1,0 +1,5 @@
+{
+  "python.linting.enabled": true,
+  "ruff.enable": true,
+  "ruff.targetVersion": "py38"
+}

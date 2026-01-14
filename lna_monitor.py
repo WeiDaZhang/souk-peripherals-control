@@ -1,3 +1,4 @@
+from typing import Tuple
 from dataclasses import dataclass
 
 from smbus2 import SMBus
@@ -56,7 +57,7 @@ class LNAMonitor:
         self._hw_config = hw_config
 
     @property
-    def get_local_voltage_range(self) -> tuple[float, float]:
+    def get_local_voltage_range(self) -> Tuple[float, float]:
         """Calculates the achievable local voltage range based on the hardware configuration.
         Returns:
             tuple[float, float]: (min_voltage, max_voltage) in volts.

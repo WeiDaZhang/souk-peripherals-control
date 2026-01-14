@@ -82,9 +82,10 @@ class TCA9548(I2CDevice):
     def update_channel_config(self) -> None:
         if not hasattr(self, "_channel_config"):
             self._channel_config = ChannelConfig(0)
-        self._channel_config.config_byte = self.read()
+        self._channel_config.config_byte = self.read()[0]
 
     def turn_on_channel(self, channel: int) -> ChannelConfig:
+        print(channel)
         if not (0 <= channel <= 7):
             raise ValueError("channel must be between 0 and 7")
         new_config_byte = self.channel_config.config_byte | (1 << channel)

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Tuple
 from dataclasses import dataclass
 from i2c_devices import I2CDevice
 
@@ -187,7 +187,7 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
         self.write_tap_pos(tap_pos)
 
     @property
-    def r_aw_range(self) -> tuple[float, float]:
+    def r_aw_range(self) -> Tuple[float, float]:
         return (self.r_ts, self.r_ab + self.r_w)
 
     @property
@@ -212,7 +212,7 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
         self.write_tap_pos(tap_pos)
 
     @property
-    def r_bw_range(self) -> tuple[float, float]:
+    def r_bw_range(self) -> Tuple[float, float]:
         return (self.r_w, self.r_ab + self.r_w)
 
     def read_tap_pos(self, eeprom: bool = False) -> int:
