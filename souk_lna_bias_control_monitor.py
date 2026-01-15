@@ -257,6 +257,9 @@ class SOUKLNABiasControlMonitor:
 
 def main():
     import time
+    import logging
+
+    logging.basicConfig(level=logging.DEBUG)
 
     i2c_bus = SMBus(0)
 
