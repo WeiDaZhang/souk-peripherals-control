@@ -11,6 +11,15 @@ DEV_ADDRS = {
     ("high", "high"): 0x26,
     ("high", "float"): 0x27,
 }
+DEV_ADDRS_MAP = {
+    0x14: {"ca1": "low", "ca0": "high"},
+    0x15: {"ca1": "low", "ca0": "float"},
+    0x17: {"ca1": "float", "ca0": "high"},
+    0x24: {"ca1": "float", "ca0": "float"},
+    0x25: {"ca1": "float", "ca0": "low"},
+    0x26: {"ca1": "high", "ca0": "high"},
+    0x27: {"ca1": "high", "ca0": "float"},
+}
 
 
 @dataclass(frozen=True)
@@ -172,6 +181,11 @@ class LTC2481CDD(I2CDevice):
         v_operation: float = 5,
     ):
         dev_addr = DEV_ADDRS.get((ca1, ca0), None)
+        dev_addr = [
+            addr
+            for addr, pin_map in list(DEV_ADDRS_MAP.items())
+            if pin_map["ca0"] == ca0 and pin_map["ca1"] == ca1
+        ][0]
         if dev_addr is None:
             raise ValueError(f"Invalid combination of ca1={ca1} and ca0={ca0}")
         self._ca0 = ca0
