@@ -110,7 +110,7 @@ class SOUKLNABiasControlMonitor:
         self._lna_monitors: Dict[str, Union[LNAMonitor, None]] = {}
         for refdes, lna_hw_config in hw_config.lna_monitor_hw_configs.items():
             if lna_hw_config is not None:
-                print(list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0])
+                print((refdes, lna_hw_config))
                 self._turn_on_channel(
                     list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]
                 )
