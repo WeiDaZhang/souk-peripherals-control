@@ -37,7 +37,9 @@ class I2CDevice:
             return self._bus.read_i2c_block_data(self.addr, register, length)
 
     def write(self, data, register: int = None) -> None:
-        logging.debug(f"Writing data to device {self.name} at address {self.addr}")
+        logging.debug(
+            f"Writing {len(data) if isinstance(data, list) else 1} byte(s) of data to device {self.name} at address {self.addr}"
+        )
         if isinstance(data, int):
             if register is None:
                 self._bus.write_byte(self.addr, data)
