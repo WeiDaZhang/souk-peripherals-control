@@ -110,7 +110,6 @@ class SOUKLNABiasControlMonitor:
         self._lna_monitors: Dict[str, Union[LNAMonitor, None]] = {}
         for refdes, lna_hw_config in hw_config.lna_monitor_hw_configs.items():
             if lna_hw_config is not None:
-                print((refdes, lna_hw_config))
                 self._turn_on_channel(
                     list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]
                 )
@@ -226,9 +225,11 @@ class SOUKLNABiasControlMonitor:
             if list(chn_map.values())[0][0] == "root"
         ]:
             self._root_switch.turn_on_channel(
-                list(chn_map.values())[0][1]
-                for chn_map in list(REFDES_LNA_MONITOR_CHN_MAP.values())
-                if list(chn_map.keys())[0] == chn
+                [
+                    list(chn_map.values())[0][1]
+                    for chn_map in list(REFDES_LNA_MONITOR_CHN_MAP.values())
+                    if list(chn_map.keys())[0] == chn
+                ][0]
             )
         elif chn in [
             list(chn_map.keys())[0]
@@ -236,9 +237,11 @@ class SOUKLNABiasControlMonitor:
             if list(chn_map.values())[0][0] == "leaf"
         ]:
             self._leaf_switch.turn_on_channel(
-                list(chn_map.values())[0][1]
-                for chn_map in list(REFDES_LNA_MONITOR_CHN_MAP.values())
-                if list(chn_map.keys())[0] == chn
+                [
+                    list(chn_map.values())[0][1]
+                    for chn_map in list(REFDES_LNA_MONITOR_CHN_MAP.values())
+                    if list(chn_map.keys())[0] == chn
+                ][0]
             )
         else:
             raise ValueError(f"Invalid channel number: {chn}")
