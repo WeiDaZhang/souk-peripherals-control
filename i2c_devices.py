@@ -27,7 +27,7 @@ class I2CDevice:
         logging.debug(
             f"Reading {length} bytes from device {self.name} at address {self.addr}"
         )
-        time.sleep(0.5)  # small delay to ensure bus is ready
+        time.sleep(1.1234)  # small delay to ensure bus is ready
         if length == 1:
             if register is None:
                 return [self._bus.read_byte(self.addr)]
@@ -42,7 +42,7 @@ class I2CDevice:
         logging.debug(
             f"Writing {len(data) if isinstance(data, list) else 1} byte(s) of data to device {self.name} at address {self.addr}"
         )
-        time.sleep(0.5)  # small delay to ensure bus is ready
+        time.sleep(1.1234)  # small delay to ensure bus is ready
         if isinstance(data, int):
             if register is None:
                 self._bus.write_byte(self.addr, data)
