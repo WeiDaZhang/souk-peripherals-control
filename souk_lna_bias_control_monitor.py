@@ -267,8 +267,8 @@ def main():
                     DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
                 ),
                 remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="low",
+                    CA0="low",
+                    CA1="float",
                 ),
                 imonitor_adc_hw_config=LTC2481CDDHWConfig(
                     CA0="float",
@@ -294,8 +294,8 @@ def main():
                     DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
                 ),
                 remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="low",
+                    CA0="low",
+                    CA1="float",
                 ),
                 imonitor_adc_hw_config=LTC2481CDDHWConfig(
                     CA0="float",
@@ -312,8 +312,8 @@ def main():
                     DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
                 ),
                 remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="low",
+                    CA0="low",
+                    CA1="float",
                 ),
                 imonitor_adc_hw_config=LTC2481CDDHWConfig(
                     CA0="float",
@@ -330,8 +330,8 @@ def main():
                     DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
                 ),
                 remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="low",
+                    CA0="low",
+                    CA1="float",
                 ),
                 imonitor_adc_hw_config=LTC2481CDDHWConfig(
                     CA0="float",
@@ -348,8 +348,8 @@ def main():
                     DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
                 ),
                 remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="low",
+                    CA0="low",
+                    CA1="float",
                 ),
                 imonitor_adc_hw_config=LTC2481CDDHWConfig(
                     CA0="float",
