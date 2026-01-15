@@ -1,4 +1,5 @@
 from smbus2 import SMBus
+import time
 
 
 class I2CDevice:
@@ -22,6 +23,7 @@ class I2CDevice:
         return self.name
 
     def read(self, length: int = 1, register: int = None) -> list:
+        time.sleep(0.01)  # small delay to ensure bus is ready
         if length == 1:
             if register is None:
                 return [self._bus.read_byte(self.addr)]
@@ -33,6 +35,7 @@ class I2CDevice:
             return self._bus.read_i2c_block_data(self.addr, register, length)
 
     def write(self, data, register: int = None) -> None:
+        time.sleep(0.01)  # small delay to ensure bus is ready
         if isinstance(data, int):
             if register is None:
                 self._bus.write_byte(self.addr, data)
