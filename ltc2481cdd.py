@@ -1,3 +1,4 @@
+import logging
 from typing import Literal, Dict
 from dataclasses import dataclass, field
 from i2c_devices import I2CDevice
@@ -296,6 +297,7 @@ class LTC2481CDD(I2CDevice):
         if self.intra_meas:
             self.intra_meas = False  # switch to voltage mode if in temp mode
         data_out = self.read_data()
+        logging.debug(f"Read outcome: {data_out}")
         return data_out.signal.value
 
     def read_temperature(self) -> float:
