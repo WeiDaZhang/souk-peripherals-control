@@ -107,7 +107,7 @@ class LTC2481CDDOUT:
         if not (0 <= self.raw24 <= 0xFFFFFF):
             raise ValueError("raw24 must be a 24-bit unsigned integer (0 to 16777215).")
 
-        data_dict = self.parse_raw(self.raw24)
+        data_dict = self.parse_raw()
         self.signal = LTC2481CDDSignal(**data_dict["signal"])
         self.config = data_dict["config"]
 
