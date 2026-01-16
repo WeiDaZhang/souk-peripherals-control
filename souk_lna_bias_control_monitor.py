@@ -393,6 +393,7 @@ def main():
                 f"Set LNA chn {chn} local voltage to {v_set:.3f} V, actual: {actual_v_set[chn]:.3f} V"
             )
 
+        time.sleep(5)
         status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
         print(status)
         time.sleep(10)
