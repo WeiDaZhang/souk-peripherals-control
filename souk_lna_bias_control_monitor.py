@@ -171,6 +171,8 @@ class SOUKLNABiasControlMonitor:
                 }
             else:
                 self._turn_on_channel(c)
+                lna_monitor.read_remote_voltage()
+                lna_monitor.read_bias_current()
                 status[c] = {
                     "remote": lna_monitor.read_remote_voltage(),
                     "local": lna_monitor.read_local_voltage(),
