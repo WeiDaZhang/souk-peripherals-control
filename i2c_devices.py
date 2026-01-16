@@ -34,7 +34,7 @@ class I2CDevice:
                 try:
                     return [self._bus.read_byte(self.addr)]
                 except OSError as e:
-                    logging.error(
+                    logging.warning(
                         f"Error reading byte from device {self.name} at address {self.addr}: {e}, trying again after delay ..."
                     )
                     time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
@@ -43,7 +43,7 @@ class I2CDevice:
                 try:
                     return [self._bus.read_byte_data(self.addr, register)]
                 except OSError as e:
-                    logging.error(
+                    logging.warning(
                         f"Error reading byte data from device {self.name} at address {self.addr}, register {register}: {e}, trying again after delay ..."
                     )
                     time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
@@ -54,7 +54,7 @@ class I2CDevice:
             try:
                 return self._bus.read_i2c_block_data(self.addr, register, length)
             except OSError as e:
-                logging.error(
+                logging.warning(
                     f"Error reading i2c block data from device {self.name} at address {self.addr}, register {register}: {e}, trying again after delay ..."
                 )
                 time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
@@ -69,7 +69,7 @@ class I2CDevice:
                 try:
                     self._bus.write_byte(self.addr, data)
                 except OSError as e:
-                    logging.error(
+                    logging.warning(
                         f"Error writing byte to device {self.name} at address {self.addr}: {e}, trying again after delay ..."
                     )
                     time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
@@ -78,7 +78,7 @@ class I2CDevice:
                 try:
                     self._bus.write_byte_data(self.addr, register, data)
                 except OSError as e:
-                    logging.error(
+                    logging.warning(
                         f"Error writing byte data to device {self.name} at address {self.addr}, register {register}: {e}, trying again after delay ..."
                     )
                     time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
@@ -89,7 +89,7 @@ class I2CDevice:
             try:
                 self._bus.write_i2c_block_data(self.addr, register, data)
             except OSError as e:
-                logging.error(
+                logging.warning(
                     f"Error writing i2c block data to device {self.name} at address {self.addr}, register {register}: {e}, trying again after delay ..."
                 )
                 time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry

@@ -261,7 +261,7 @@ def main():
     import math
     import random
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     i2c_bus = SMBus(0)
 
