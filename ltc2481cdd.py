@@ -296,10 +296,10 @@ class LTC2481CDD(I2CDevice):
         if self.intra_meas:
             self.intra_meas = False  # switch to voltage mode if in temp mode
         data_out = self.read_data()
-        return data_out.signal["value"]
+        return data_out.signal.value
 
     def read_temperature(self) -> float:
         if not self.intra_meas:
             self.intra_meas = True  # switch to temp mode if in voltage mode
         data_out = self.read_data()
-        return data_out.signal["value"]
+        return data_out.signal.value
