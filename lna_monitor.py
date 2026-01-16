@@ -73,18 +73,25 @@ class LNAMonitor:
                 v_local / self._hw_config.i_set_LDO,
                 self._hw_config.r_LDO_set_kOhm * 1000,
             )
-            - self._hw_config.r_RTop1_kOhm * 1000
-            if not self._hw_config.switch_status
-            else 0 - self._hw_config.r_RBot1_kOhm * 1000,
+            - (
+                self._hw_config.r_RTop1_kOhm * 1000
+                if not self._hw_config.switch_status
+                else 0
+            )
+            - self._hw_config.r_RBot1_kOhm * 1000,
             self._hw_config.r_RAdj1_kOhm * 1000,
         )
 
     def _r_dac_r_aw_to_local_voltage(self, r_aw: float) -> float:
         r_paral = parallel_resistance(r_aw, self._hw_config.r_RAdj1_kOhm * 1000)
         r_total = parallel_resistance(
-            r_paral + self._hw_config.r_RTop1_kOhm * 1000
-            if not self._hw_config.switch_status
-            else 0 + self._hw_config.r_RBot1_kOhm * 1000,
+            r_paral
+            + (
+                self._hw_config.r_RTop1_kOhm * 1000
+                if not self._hw_config.switch_status
+                else 0
+            )
+            + self._hw_config.r_RBot1_kOhm * 1000,
             self._hw_config.r_LDO_set_kOhm * 1000,
         )
         logging.debug(
