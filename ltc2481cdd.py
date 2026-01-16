@@ -131,17 +131,19 @@ class LTC2481CDDOUT:
         SPD_BIT = 0
         T_SLOPE = 0.0014  # V/°C
 
-        # extract sign (bit22)
+        # extract sign (bit23) and overflow (bit22)
         sign = (self.raw24 >> SIG_BIT) & 0x1
         overflow = (self.raw24 >> MSB_BIT) & 0x1 == sign
-        # extract 16-bit measurement (bits 21..6)
-        magnitude = (self.raw24 >> LSB_BIT) & (2 ** (MSB_BIT - LSB_BIT) - 1)  # 16 bits
-        # signed conversion: sign bit indicates negative (two's complement-like handling)
-        # Interpret as signed 16-bit magnitude with separate sign bit:
+        # extract 17-bit measurement (bits 22..6)
+        magnitude = (self.raw24 >> LSB_BIT) & (
+            2 ** (MSB_BIT - LSB_BIT + 1) - 1
+        )  # 17 bits
         if sign == 1:
             signed = magnitude
         else:
-            signed = magnitude - (1 << (MSB_BIT - LSB_BIT))  # negative value
+            signed = magnitude - (1 << (MSB_BIT - LSB_BIT + 1))  # negative value
+            if magnitude == 0:
+                signed = 0  # zero case
 
         # extract PG2..PG0 (bits5..3)
         pg = (self.raw24 >> PG_BITS[1]) & PG_BITS[0]
@@ -152,10 +154,12 @@ class LTC2481CDDOUT:
         config = LTC2481CDDConfig(gs=pg, im=bool(im), spd=bool(spd))  # validate config
         if config.im:
             value = (
-                signed / 2 ** (MSB_BIT - LSB_BIT) * self.v_reference / T_SLOPE
+                signed / 2 ** (MSB_BIT - LSB_BIT) * self.v_reference / 2 / T_SLOPE
             )  # temp mode
         else:
-            value = signed / 2 ** (MSB_BIT - LSB_BIT) * (self.v_reference / config.gain)
+            value = (
+                signed / 2 ** (MSB_BIT - LSB_BIT) * (self.v_reference / 2 / config.gain)
+            )
 
         return {
             "signal": {
