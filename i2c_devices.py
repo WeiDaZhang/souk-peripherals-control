@@ -2,7 +2,7 @@ from smbus2 import SMBus
 import logging
 import time
 
-RETRY_DELAY_SECONDS = 1.2345
+RETRY_DELAY_SECONDS = 1.0
 
 
 class I2CDevice:
