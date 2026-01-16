@@ -376,6 +376,8 @@ def main():
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
 
     while True:
+        lna_local_range = souk_lna_monitor.lna_local_voltage_ranges
+        print(lna_local_range)
         status = souk_lna_monitor.read_lna_status(chn=[1, 3])
         print(status)
         time.sleep(2)
