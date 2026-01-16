@@ -175,7 +175,7 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
             r_bs=self.r_bs,
             r_ts=self.r_ts,
             r_w=self.r_w,
-        )["r_aw"]
+        ).data["r_aw"]
 
     @r_aw.setter
     def r_aw(self, value: float):
