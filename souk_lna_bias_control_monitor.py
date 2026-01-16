@@ -258,6 +258,8 @@ class SOUKLNABiasControlMonitor:
 def main():
     import time
     import logging
+    import math
+    import random
 
     logging.basicConfig(level=logging.DEBUG)
 
@@ -375,10 +377,23 @@ def main():
 
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
 
+    chn_idxes = [1, 3]
     while True:
         lna_local_range = souk_lna_monitor.lna_local_voltage_ranges
         print(lna_local_range)
-        status = souk_lna_monitor.read_lna_status(chn=[1, 3])
+
+        for chn in chn_idxes:
+            v_min, v_max = lna_local_range[chn]
+            if any(math.isnan(v_range) for v_range in (v_min, v_max)):
+                print(f"Skipping LNA chn {chn} as it is not configured.")
+                continue
+            v_set = random.uniform(v_min, v_max)
+            actual_v_set = souk_lna_monitor.set_lna_bias_local(chn=chn, v_local=v_set)
+            print(
+                f"Set LNA chn {chn} local voltage to {v_set:.3f} V, actual: {actual_v_set[chn]:.3f} V"
+            )
+
+        status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
         print(status)
         time.sleep(2)
 
