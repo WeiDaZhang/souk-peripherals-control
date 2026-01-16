@@ -1,5 +1,6 @@
 from typing import Tuple
 from dataclasses import dataclass
+import logging
 
 from smbus2 import SMBus
 
@@ -57,7 +58,7 @@ class LNAMonitor:
         self._hw_config = hw_config
 
     @property
-    def get_local_voltage_range(self) -> Tuple[float, float]:
+    def local_voltage_range(self) -> Tuple[float, float]:
         """Calculates the achievable local voltage range based on the hardware configuration.
         Returns:
             tuple[float, float]: (min_voltage, max_voltage) in volts.
@@ -85,6 +86,9 @@ class LNAMonitor:
             if not self._hw_config.switch_status
             else 0 + self._hw_config.r_RBot1_kOhm * 1000,
             self._hw_config.r_LDO_set_kOhm * 1000,
+        )
+        logging.debug(
+            f"r_aw: {r_aw:.2f} Ohm, r_paral: {r_paral:.2f} Ohm, r_total: {r_total:.2f} Ohm"
         )
         return self._hw_config.i_set_LDO * r_total
 

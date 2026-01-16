@@ -133,7 +133,7 @@ class SOUKLNABiasControlMonitor:
             if lna_monitor is None:
                 voltage_ranges[chn] = (float("nan"), float("nan"))
             else:
-                voltage_ranges[chn] = lna_monitor.get_local_voltage_range
+                voltage_ranges[chn] = lna_monitor.local_voltage_range
         return voltage_ranges
 
     def read_lna_status(
