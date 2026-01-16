@@ -261,7 +261,7 @@ def main():
     import math
     import random
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     i2c_bus = SMBus(0)
 
@@ -279,7 +279,7 @@ def main():
                     CA0="float",
                     CA1="float",
                 ),
-                switch_status=False,
+                switch_status=True,
                 r_LDO_set_kOhm=82.0,
                 r_RTop1_kOhm=18.0,
                 r_RBot1_kOhm=18.0,
@@ -395,7 +395,7 @@ def main():
 
         status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
         print(status)
-        time.sleep(2)
+        time.sleep(10)
 
 
 if __name__ == "__main__":
