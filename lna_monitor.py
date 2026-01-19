@@ -138,8 +138,10 @@ class LNAMonitor:
         """
         v_local = self.read_local_voltage()
         logging.debug(f"Local voltage: {v_local:.3f} V")
-        v_top_drop = v_local - self._imonitor_adc.read_voltage(dump_first=dump_first)
-        logging.debug(f"Top drop voltage: {v_top_drop:.3f} V")
         v_remote = self._remote_adc.read_voltage(dump_first=dump_first)
         logging.debug(f"Remote voltage: {v_remote:.3f} V")
+        v_top_drop = (
+            v_local - self._imonitor_adc.read_voltage(dump_first=dump_first) - v_remote
+        )
+        logging.debug(f"Top drop voltage: {v_top_drop:.3f} V")
         return v_remote - v_top_drop
