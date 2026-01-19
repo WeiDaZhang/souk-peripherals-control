@@ -2,6 +2,8 @@ from typing import Literal, Tuple
 from dataclasses import dataclass
 from i2c_devices import I2CDevice
 
+RES_ROUNDING_ERROR = 1  # Ohm
+
 
 @dataclass(frozen=True)
 class AD511_0_2_4BCPZ_5_10_80HWConfig:
@@ -179,7 +181,9 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
 
     @r_aw.setter
     def r_aw(self, value: float):
-        if value < self.r_w or value > (self.r_ab + self.r_w):
+        if value < self.r_w - RES_ROUNDING_ERROR or value > (
+            self.r_ab + self.r_w + RES_ROUNDING_ERROR
+        ):
             raise ValueError(
                 f"r_aw value {value} must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
             )
@@ -204,7 +208,9 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
 
     @r_bw.setter
     def r_bw(self, value: float):
-        if value < self.r_w or value > (self.r_ab + self.r_w):
+        if value < self.r_w - RES_ROUNDING_ERROR or value > (
+            self.r_ab + self.r_w + RES_ROUNDING_ERROR
+        ):
             raise ValueError(
                 f"r_bw value {value} must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
             )
