@@ -181,7 +181,7 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
     def r_aw(self, value: float):
         if value < self.r_w or value > (self.r_ab + self.r_w):
             raise ValueError(
-                f"r_aw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
+                f"r_aw value {value} must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
             )
         tap_pos = round((1 - (value - self.r_w) / self.r_ab) * self.resolution)
         self.write_tap_pos(tap_pos)
@@ -206,7 +206,7 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
     def r_bw(self, value: float):
         if value < self.r_w or value > (self.r_ab + self.r_w):
             raise ValueError(
-                f"r_bw must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
+                f"r_bw value {value} must be between {self.r_w} Ohm and {self.r_ab + self.r_w} Ohm."
             )
         tap_pos = round((value - self.r_w) / self.r_ab * self.resolution)
         self.write_tap_pos(tap_pos)
