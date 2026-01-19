@@ -305,6 +305,7 @@ class SOUKLNABiasControlMonitor:
                             + f"because estimated LNA voltage is not between 0 V and remote voltage {v_remote:.3f} V. "
                             + "Resistor values or switch status may be incorrect for this channel.",
                         )
+                        break
                     if estimate_v_remotes[c][-1] >= v:
                         if len(estimate_v_remotes[c]) == 1:
                             actual_v_locals[c] = (
