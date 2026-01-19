@@ -228,5 +228,25 @@ class AD511_0_2_4BCPZ_5_10_80(I2CDevice):
     def update_eeprom(self):
         self.write(0, self._cmd.UPDATE_EEPROM_CMD)
 
+    def increase_tap_pos(self, step: int = 1) -> bool:
+        # to increase resistance r_bw, decrease r_aw
+        current_tap = self.read_tap_pos()
+        if current_tap + step > self.resolution:
+            return False
+        else:
+            new_tap = current_tap + step
+            self.write_tap_pos(new_tap)
+            return True
+
+    def decrease_tap_pos(self, step: int = 1) -> bool:
+        # to decrease resistance r_bw, increase r_aw
+        current_tap = self.read_tap_pos()
+        if current_tap - step < 0:
+            return False
+        else:
+            new_tap = current_tap - step
+            self.write_tap_pos(new_tap)
+            return True
+
     def calibrate_scales_wiper(self):
         pass  # Placeholder for future calibration method

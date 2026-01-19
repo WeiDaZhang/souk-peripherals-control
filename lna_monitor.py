@@ -130,3 +130,13 @@ class LNAMonitor:
             float: The bias current in amperes.
         """
         return self._imonitor_adc.read_voltage() / self._hw_config.r_RSENSE_OHMS
+
+    def estimate_lna_voltage(self, dump_first: bool = True) -> float:
+        """Estimates the LNA voltage based on the local voltage and bias current.
+        Returns:
+            float: The estimated LNA voltage in volts.
+        """
+        v_local = self.read_local_voltage()
+        v_top_drop = v_local - self._imonitor_adc.read_voltage(dump_first=dump_first)
+        v_remote = self._remote_adc.read_voltage(dump_first=dump_first)
+        return v_remote - v_top_drop

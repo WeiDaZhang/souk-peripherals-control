@@ -171,8 +171,6 @@ class SOUKLNABiasControlMonitor:
                 }
             else:
                 self._turn_on_channel(c)
-                lna_monitor.read_remote_voltage()
-                lna_monitor.read_bias_current()
                 status[c] = {
                     "remote": lna_monitor.read_remote_voltage(),
                     "local": lna_monitor.read_local_voltage(),
@@ -256,12 +254,138 @@ class SOUKLNABiasControlMonitor:
         if except_chn is not None:
             self._root_switch.turn_on_channel(except_chn)
 
+    def set_lna_bias_remote(
+        self, chn: Union[int, List[int]], v_local: Union[float, List[float]]
+    ) -> Dict[int, Tuple[float, str]]:
+        """Calculates and sets the DAC resistance to achieve the desired local voltage.
+        Args:
+            chn (int): The channel number (1-14), or
+            chn (list[int]): A list of channel numbers.
+            v_local (float): Desired local voltage in volts, or
+            v_local (list[float]): A list of desired local voltages in volts.
+        Returns:
+            dict[int, Tuple[float, str]]: The actual local voltages set after adjusting the DAC and failed message.
+        """
+        if isinstance(chn, int):
+            chn = [chn]
+        for c in chn:
+            if c not in [
+                list(chn_map.keys())[0]
+                for chn_map in list(REFDES_LNA_MONITOR_CHN_MAP.values())
+            ]:
+                raise ValueError(f"Invalid channel number: {c}")
+        if isinstance(v_local, float):
+            v_local = [v_local] * len(chn)
+        if len(v_local) != len(chn):
+            raise ValueError("Length of v_local must match length of chn.")
+        actual_v_locals: Dict[int, Tuple[float, str]] = {}
+        estimate_v_remotes: Dict[int, List[float]] = {}
+        for c, v in zip(chn, v_local):
+            refdes = next(
+                key
+                for key, value in REFDES_LNA_MONITOR_CHN_MAP.items()
+                if list(value.keys())[0] == c
+            )
+            lna_monitor = self._lna_monitors.get(refdes, None)
+            if lna_monitor is None:
+                actual_v_locals[c] = (float("nan"), "LNA monitor not configured.")
+            else:
+                self._turn_on_channel(c)
+                local_voltage_range = lna_monitor.local_voltage_range
+                # set to lowest local voltage first
+                lna_monitor.set_local_voltage(local_voltage_range[0])
+                estimate_v_remotes[c] = []
+                while True:
+                    estimate_v_remotes[c].append(lna_monitor.estimate_lna_voltage())
+                    v_remote = lna_monitor._remote_adc.read_voltage(dump_first=False)
+                    if not (v_remote > estimate_v_remotes[c][-1] > 0):
+                        actual_v_locals[c] = (
+                            estimate_v_remotes[c][-1],
+                            f"Cannot set remote voltage for channel {c}, "
+                            + f"because estimated LNA voltage is not between 0 V and remote voltage {v_remote:.3f} V. "
+                            + "Resistor values or switch status may be incorrect for this channel.",
+                        )
+                    if estimate_v_remotes[c][-1] >= v:
+                        if len(estimate_v_remotes[c]) == 1:
+                            actual_v_locals[c] = (
+                                estimate_v_remotes[c][-1],
+                                "Lowest local voltage already exceeds desired remote voltage.",
+                            )
+                        elif abs(estimate_v_remotes[c][-2] - v) < abs(
+                            estimate_v_remotes[c][-1] - v
+                        ):
+                            lna_monitor._r_dac.increase_tap_pos()
+                            actual_v_locals[c] = (estimate_v_remotes[c][-2], "")
+                        else:
+                            actual_v_locals[c] = (estimate_v_remotes[c][-1], "")
+                        break
+                    else:
+                        decr_tap = lna_monitor._r_dac.decrease_tap_pos()
+                        if not decr_tap:
+                            actual_v_locals[c] = (
+                                estimate_v_remotes[c][-1],
+                                f"Reached maximum local voltage for channel {c} but desired remote voltage not achieved.",
+                            )
+                            break
+                self._turn_off_all_channels()
+        return actual_v_locals
 
-def main():
+
+def read_set_local_voltage_demo(
+    souk_lna_monitor: SOUKLNABiasControlMonitor, chn_idxes: List[int]
+) -> None:
     import time
-    import logging
     import math
     import random
+
+    while True:
+        lna_local_range = souk_lna_monitor.lna_local_voltage_ranges
+        print(lna_local_range)
+
+        for chn in chn_idxes:
+            v_min, v_max = lna_local_range[chn]
+            if any(math.isnan(v_range) for v_range in (v_min, v_max)):
+                print(f"Skipping LNA chn {chn} as it is not configured.")
+                continue
+            v_set = random.uniform(v_min, v_max)
+            actual_v_set = souk_lna_monitor.set_lna_bias_local(chn=chn, v_local=v_set)
+            print(
+                f"Set LNA chn {chn} local voltage to {v_set:.3f} V, actual: {actual_v_set[chn]:.3f} V"
+            )
+
+        time.sleep(5)
+        status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
+        print(status)
+        time.sleep(10)
+
+
+def main():
+    import logging
+    import argparse
+
+    parser = argparse.ArgumentParser(description="SOUK LNA Bias Control Monitor")
+    parser.add_argument(
+        "--channels",
+        type=int,
+        nargs="+",
+        default=[1, 3],
+        help="List of LNA channel indices to monitor",
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Demo for reading and setting local voltage",
+    )
+    parser.add_argument(
+        "--remote", action="store_true", help="Demo for setting remote voltage"
+    )
+    parser.add_argument(
+        "--value",
+        type=float,
+        default=1.2,
+        help="Voltage value for setting remote voltage demo",
+    )
+    args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG)
 
@@ -379,26 +503,13 @@ def main():
 
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
 
-    chn_idxes = [1, 3]
-    while True:
-        lna_local_range = souk_lna_monitor.lna_local_voltage_ranges
-        print(lna_local_range)
-
-        for chn in chn_idxes:
-            v_min, v_max = lna_local_range[chn]
-            if any(math.isnan(v_range) for v_range in (v_min, v_max)):
-                print(f"Skipping LNA chn {chn} as it is not configured.")
-                continue
-            v_set = random.uniform(v_min, v_max)
-            actual_v_set = souk_lna_monitor.set_lna_bias_local(chn=chn, v_local=v_set)
-            print(
-                f"Set LNA chn {chn} local voltage to {v_set:.3f} V, actual: {actual_v_set[chn]:.3f} V"
-            )
-
-        time.sleep(5)
-        status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
-        print(status)
-        time.sleep(10)
+    if args.local:
+        read_set_local_voltage_demo(souk_lna_monitor, args.channels)
+    if args.remote:
+        result = souk_lna_monitor.set_lna_bias_remote(
+            chn=args.channels, v_local=args.value
+        )
+        print(result)
 
 
 if __name__ == "__main__":
