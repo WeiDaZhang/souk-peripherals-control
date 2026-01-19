@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Dict
 from dataclasses import dataclass
 import logging
 
@@ -131,7 +131,7 @@ class LNAMonitor:
         """
         return self._imonitor_adc.read_voltage() / self._hw_config.r_RSENSE_OHMS
 
-    def estimate_lna_voltage(self, dump_first: bool = True) -> float:
+    def estimate_lna_voltage(self, dump_first: bool = True) -> Dict[str, float]:
         """Estimates the LNA voltage based on the local voltage and bias current.
         Returns:
             float: The estimated LNA voltage in volts.
@@ -144,4 +144,9 @@ class LNAMonitor:
             v_local - self._imonitor_adc.read_voltage(dump_first=dump_first) - v_remote
         )
         logging.debug(f"Top drop voltage: {v_top_drop:.3f} V")
-        return v_remote - v_top_drop
+        return {
+            "v_lna": v_remote - v_top_drop,
+            "v_remote": v_remote,
+            "v_top_drop": v_top_drop,
+            "v_local": v_local,
+        }

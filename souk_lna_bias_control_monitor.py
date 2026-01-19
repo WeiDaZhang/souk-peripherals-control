@@ -296,8 +296,9 @@ class SOUKLNABiasControlMonitor:
                 lna_monitor.set_local_voltage(local_voltage_range[0])
                 estimate_v_remotes[c] = []
                 while True:
-                    estimate_v_remotes[c].append(lna_monitor.estimate_lna_voltage())
-                    v_remote = lna_monitor._remote_adc.read_voltage(dump_first=False)
+                    v_estimation = lna_monitor.estimate_lna_voltage()
+                    estimate_v_remotes[c].append(v_estimation["v_lna"])
+                    v_remote = v_estimation["v_remote"]
                     if not (v_remote > estimate_v_remotes[c][-1] > 0):
                         actual_v_locals[c] = (
                             estimate_v_remotes[c][-1],
