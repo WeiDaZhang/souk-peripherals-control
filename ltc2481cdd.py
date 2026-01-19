@@ -292,22 +292,24 @@ class LTC2481CDD(I2CDevice):
                 raise KeyError(f"Invalid configuration key: {key}")
         self.write(self._config.config_byte)
 
-    def read_data(self) -> LTC2481CDDOUT:
+    def read_data(self, dump_first: bool = True) -> LTC2481CDDOUT:
+        if dump_first:  # Dump the first read which belongs to last measurement cycle
+            self.read(length=3)
         raw_data = self.read(length=3)
         raw24 = (raw_data[0] << 16) | (raw_data[1] << 8) | raw_data[2]
         return LTC2481CDDOUT(raw24=raw24, v_reference=self.v_reference)
 
-    def read_voltage(self) -> float:
+    def read_voltage(self, dump_first: bool = True) -> float:
         if self.intra_meas:
             self.intra_meas = False  # switch to voltage mode if in temp mode
-        data_out = self.read_data()
+        data_out = self.read_data(dump_first=dump_first)
         logging.debug(f"Read outcome: {data_out}")
         logging.debug(f"Parsed read signal: {data_out.signal}")
         logging.debug(f"Parsed read config: {data_out.config}")
         return data_out.signal.value
 
-    def read_temperature(self) -> float:
+    def read_temperature(self, dump_first: bool = True) -> float:
         if not self.intra_meas:
             self.intra_meas = True  # switch to temp mode if in voltage mode
-        data_out = self.read_data()
+        data_out = self.read_data(dump_first=dump_first)
         return data_out.signal.value
