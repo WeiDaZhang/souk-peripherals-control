@@ -235,3 +235,63 @@ class SOUKRFMixerlessModule:
             )
         states = target_atten_amp.atten_amp.get_gpio_bit(bits=[AMP_BYPASS_BIT])
         return states[0]
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="SOUK RF Mixerless Module Demo")
+    parser.add_argument(
+        "--channels",
+        type=int,
+        nargs="+",
+        default=[0],
+        help="List of RFMixerless module channels to operate on (0-indexed).",
+    )
+    parser.add_argument(
+        "--recv",
+        action="store_true",
+        help="Target receive path attenuator if set; otherwise, target transmit path attenuator.",
+    )
+    parser.add_argument(
+        "--value",
+        type=float,
+        default=1.2,
+        help="attenuation value in dB to set (0 to 31.5 dB).",
+    )
+    parser.add_argument(
+        "--bypass",
+        action="store_true",
+        help="Set amplifier to bypass mode if set; otherwise, set to normal mode.",
+    )
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.DEBUG)
+
+    i2c_bus = SMBus(0)
+    hw_config_list = [
+        SOUKRFMixerlessModuleChnHWConfig(
+            r8_r13="R8",
+            r9_r14="R9",
+            r12_r17="R12",
+            r18_r21="R18",
+            r19_r22="R19",
+            r20_r23="R20",
+            u4_type="MAX7328",
+            u8_type="MAX7328",
+        )
+    ]
+    rfmixerless_module = SOUKRFMixerlessModule(i2c_bus, hw_config_list)
+    for chn_idx in args.channels:
+        dev_name = "recv_atten" if args.recv else "transmit_atten"
+        rfmixerless_module.set_attenuation(chn_idx, dev_name, args.value)
+        current_atten = rfmixerless_module.get_attenuation(chn_idx, dev_name)
+        print(f"Channel {chn_idx} {dev_name} attenuation set to {current_atten} dB.")
+        rfmixerless_module.set_amp_bypass_state(chn_idx, dev_name, args.bypass)
+        current_bypass = rfmixerless_module.get_amp_bypass_state(chn_idx, dev_name)
+        bypass_str = "bypassed" if current_bypass else "enabled"
+        print(f"Channel {chn_idx} {dev_name} amplifier is {bypass_str}.")
+
+
+if __name__ == "__main__":
+    main()
