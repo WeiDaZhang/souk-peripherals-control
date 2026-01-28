@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Literal, Dict, List
+from typing import Literal, Dict, List, Optional
 from dataclasses import dataclass, field
 
 from smbus2 import SMBus
@@ -76,6 +76,14 @@ class SOUKRFMixerlessModuleChnHWConfig:
             raise ValueError("u8_type must be either 'MAX7328' or 'MAX7329'")
 
 
+@dataclass
+class SOUKRFMixerlessModuleChnAttenAmp:
+    chn_idx: int = field(init=False)
+    atten_amp: MAX732_8_9 = field(init=False)
+    atten_value_dB: float = field(default=0.0)
+    amp_bypass: bool = field(default=False)
+
+
 class SOUKRFMixerlessModule:
     def __init__(
         self, i2c_bus: SMBus, hw_config_list: List[SOUKRFMixerlessModuleChnHWConfig]
@@ -84,40 +92,49 @@ class SOUKRFMixerlessModule:
             raise ValueError("Only up to 2 channels are supported.")
         else:
             self._n_channels = len(hw_config_list)
-        self._recv_atten = []
-        self._transmit_atten = []
+        self._atten_amp_channel: List[SOUKRFMixerlessModuleChnAttenAmp] = []
         self._hw_config_list = hw_config_list
         for chn_idx, hw_config in enumerate(hw_config_list):
-            self._recv_atten.append(
-                MAX732_8_9(
-                    dev_name="recv_atten",
-                    i2c_bus=i2c_bus,
-                    ad2=GPIO_ADDR_RESISTOR_MAP["recv"]["ad2"][hw_config.r12_r17],
-                    ad1=GPIO_ADDR_RESISTOR_MAP["recv"]["ad1"][hw_config.r9_r14],
-                    ad0=GPIO_ADDR_RESISTOR_MAP["recv"]["ad0"][hw_config.r8_r13],
-                    dev_type=hw_config.u4_type,
+            self._atten_amp_channel.append(
+                SOUKRFMixerlessModuleChnAttenAmp(
+                    chn_idx=chn_idx,
                 )
             )
-            self._transmit_atten.append(
-                MAX732_8_9(
-                    dev_name="transmit_atten",
-                    i2c_bus=i2c_bus,
-                    ad2=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad2"][hw_config.r20_r23],
-                    ad1=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad1"][hw_config.r19_r22],
-                    ad0=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad0"][hw_config.r18_r21],
-                    dev_type=hw_config.u8_type,
+            self._atten_amp_channel[-1].atten_amp = MAX732_8_9(
+                dev_name="recv_atten",
+                i2c_bus=i2c_bus,
+                ad2=GPIO_ADDR_RESISTOR_MAP["recv"]["ad2"][hw_config.r12_r17],
+                ad1=GPIO_ADDR_RESISTOR_MAP["recv"]["ad1"][hw_config.r9_r14],
+                ad0=GPIO_ADDR_RESISTOR_MAP["recv"]["ad0"][hw_config.r8_r13],
+                dev_type=hw_config.u4_type,
+            )
+            self._atten_amp_channel[-1].atten_value_dB = 0.0
+            self._atten_amp_channel[-1].amp_bypass = False
+            self._atten_amp_channel.append(
+                SOUKRFMixerlessModuleChnAttenAmp(
+                    chn_idx=chn_idx,
                 )
             )
-            # add attributes to store current attenuation values
-            self._recv_atten[chn_idx].value_dB = 0.0
-            self._transmit_atten[chn_idx].value_dB = 0.0
+            self._atten_amp_channel[-1].atten_amp = MAX732_8_9(
+                dev_name="transmit_atten",
+                i2c_bus=i2c_bus,
+                ad2=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad2"][hw_config.r20_r23],
+                ad1=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad1"][hw_config.r19_r22],
+                ad0=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad0"][hw_config.r18_r21],
+                dev_type=hw_config.u8_type,
+            )
+            self._atten_amp_channel[-1].atten_value_dB = 0.0
+            self._atten_amp_channel[-1].amp_bypass = False
         self._latch_bit = [
             atten_map["bit"]
             for atten_map in list(ATTEN_CONN_MAP.values())
             if atten_map["atten"] == "latch"
         ][0]
-        self.set_attenuation("recv_atten", 0.0)
-        self.set_attenuation("transmit_atten", 0.0)
+        for chn_idx in range(self._n_channels):
+            self.set_attenuation(chn_idx, "recv_atten", 0.0)
+            self.set_attenuation(chn_idx, "transmit_atten", 0.0)
+            self.set_amp_bypass_state(chn_idx, "recv_atten", False)
+            self.set_amp_bypass_state(chn_idx, "transmit_atten", False)
 
     def set_attenuation(
         self,
@@ -138,49 +155,83 @@ class SOUKRFMixerlessModule:
                         atten_bits_list.append(attens_map["bit"])
         if chn_idx >= self._n_channels or chn_idx < 0:
             raise ValueError(f"Invalid channel index: {chn_idx}.")
-        for selfattr_str in dir(self):
-            selfattr: List[MAX732_8_9] = getattr(self, selfattr_str)
-            if isinstance(selfattr, list):
-                if all(
-                    isinstance(selfattr_item, MAX732_8_9) for selfattr_item in selfattr
-                ):
-                    if dev_name == selfattr[chn_idx].dev_name:
-                        target_attenuator: MAX732_8_9 = selfattr[chn_idx]
-                        break
-        target_attenuator.set_gpio_bit(bits=atten_bits_list, states=atten_states)
-        target_attenuator.pulse_gpio_bit(bit=self._latch_bit, pulse_width_ms=10)
-        target_attenuator.value_dB = tap_pos * 0.5
-        logging.info(f"Set {dev_name} attenuation to {target_attenuator.value_dB} dB.")
+        target_atten_amp = None
+        for atten_map in self._atten_amp_channel:
+            if (
+                atten_map.chn_idx == chn_idx
+                and atten_map.atten_amp.dev_name == dev_name
+            ):
+                target_atten_amp = atten_map
+                break
+        if target_atten_amp is None:
+            raise ValueError(
+                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
+            )
+        target_atten_amp.atten_amp.set_gpio_bit(
+            bits=atten_bits_list, states=atten_states
+        )
+        target_atten_amp.atten_amp.pulse_gpio_bit(
+            bit=self._latch_bit, pulse_width_ms=10
+        )
+        target_atten_amp.atten_value_dB = tap_pos * 0.5
+        logging.info(
+            f"Set {dev_name} attenuation to {target_atten_amp.atten_value_dB} dB."
+        )
 
-    def recv_attenuation_value(self, chn_idx: int) -> float:
-        return self._recv_atten[chn_idx].value_dB
+    def get_attenuation(
+        self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
+    ) -> float:
+        target_atten_amp = None
+        for atten_map in self._atten_amp_channel:
+            if (
+                atten_map.chn_idx == chn_idx
+                and atten_map.atten_amp.dev_name == dev_name
+            ):
+                target_atten_amp = atten_map
+                break
+        if target_atten_amp is None:
+            raise ValueError(
+                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
+            )
+        return target_atten_amp.atten_value_dB
 
-    def transmit_attenuation_value(self, chn_idx: int) -> float:
-        return self._transmit_atten[chn_idx].value_dB
-
-    def bypass_amplifier(
+    def set_amp_bypass_state(
         self,
         chn_idx: int,
         dev_name: Literal["recv_atten", "transmit_atten"],
         bypass: bool,
     ) -> None:
-        for selfattr_str in dir(self):
-            selfattr: List[MAX732_8_9] = getattr(self, selfattr_str)
-            if isinstance(selfattr, list):
-                if all(
-                    isinstance(selfattr_item, MAX732_8_9) for selfattr_item in selfattr
-                ):
-                    if dev_name == selfattr[chn_idx].dev_name:
-                        target_attenuator: MAX732_8_9 = selfattr[chn_idx]
-                        break
-        target_attenuator.set_gpio_bit(bits=[AMP_BYPASS_BIT], states=[bypass])
+        target_atten_amp = None
+        for atten_map in self._atten_amp_channel:
+            if (
+                atten_map.chn_idx == chn_idx
+                and atten_map.atten_amp.dev_name == dev_name
+            ):
+                target_atten_amp = atten_map
+                break
+        if target_atten_amp is None:
+            raise ValueError(
+                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
+            )
+        target_atten_amp.atten_amp.set_gpio_bit(bits=[AMP_BYPASS_BIT], states=[bypass])
+        target_atten_amp.amp_bypass = bypass
         state_str = "bypassed" if bypass else "enabled"
         logging.info(f"Amplifier on channel {chn_idx} {dev_name} is {state_str}.")
 
-    def recv_amplifier_bypass_state(self, chn_idx: int) -> bool:
-        states = self._recv_atten[chn_idx].get_gpio_bit(bits=[AMP_BYPASS_BIT])
-        return states[0]
-
-    def transmit_amplifier_bypass_state(self, chn_idx: int) -> bool:
-        states = self._transmit_atten[chn_idx].get_gpio_bit(bits=[AMP_BYPASS_BIT])
+    def get_amp_bypass_state(
+        self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
+    ) -> bool:
+        target_atten_amp = None
+        for atten_map in self._atten_amp_channel:
+            if (
+                atten_map.chn_idx == chn_idx
+                and atten_map.atten_amp.dev_name == dev_name
+            ):
+                target_atten_amp = atten_map
+                break
+        if target_atten_amp is None:
+            raise ValueError(
+                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
+            )
+        states = target_atten_amp.atten_amp.get_gpio_bit(bits=[AMP_BYPASS_BIT])
         return states[0]
