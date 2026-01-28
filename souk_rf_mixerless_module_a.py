@@ -34,7 +34,7 @@ GPIO_ADDR_RESISTOR_MAP = {
 
 
 @dataclass(frozen=True)
-class SOUK_RF_Mixerless_Module_AHWConfig:
+class SOUKRFMixerlessModuleChnHWConfig:
     r8_r13: Literal["R8", "R13"]  # resistor selection for i2c address
     r9_r14: Literal["R9", "R14"]  # resistor selection for i2c address
     r12_r17: Literal["R12", "R17"]  # resistor selection for i2c address
@@ -76,38 +76,54 @@ class SOUK_RF_Mixerless_Module_AHWConfig:
             raise ValueError("u8_type must be either 'MAX7328' or 'MAX7329'")
 
 
-class SOUK_RF_Mixerless_Module_A:
-    def __init__(self, i2c_bus: SMBus, hw_config: SOUK_RF_Mixerless_Module_AHWConfig):
-        self._recv_atten = MAX732_8_9(
-            dev_name="recv_atten",
-            i2c_bus=i2c_bus,
-            ad2=GPIO_ADDR_RESISTOR_MAP["recv"]["ad2"][hw_config.r12_r17],
-            ad1=GPIO_ADDR_RESISTOR_MAP["recv"]["ad1"][hw_config.r9_r14],
-            ad0=GPIO_ADDR_RESISTOR_MAP["recv"]["ad0"][hw_config.r8_r13],
-            dev_type=hw_config.u4_type,
-        )
-        self._transmit_atten = MAX732_8_9(
-            dev_name="transmit_atten",
-            i2c_bus=i2c_bus,
-            ad2=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad2"][hw_config.r20_r23],
-            ad1=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad1"][hw_config.r19_r22],
-            ad0=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad0"][hw_config.r18_r21],
-            dev_type=hw_config.u8_type,
-        )
-        self._hw_config = hw_config
+class SOUKRFMixerlessModule:
+    def __init__(
+        self, i2c_bus: SMBus, hw_config_list: List[SOUKRFMixerlessModuleChnHWConfig]
+    ):
+        if len(hw_config_list) >= 2:
+            raise ValueError("Only up to 2 channels are supported.")
+        else:
+            self._n_channels = len(hw_config_list)
+        self._recv_atten = []
+        self._transmit_atten = []
+        self._hw_config_list = hw_config_list
+        for chn_idx, hw_config in enumerate(hw_config_list):
+            self._recv_atten.append(
+                MAX732_8_9(
+                    dev_name="recv_atten",
+                    i2c_bus=i2c_bus,
+                    ad2=GPIO_ADDR_RESISTOR_MAP["recv"]["ad2"][hw_config.r12_r17],
+                    ad1=GPIO_ADDR_RESISTOR_MAP["recv"]["ad1"][hw_config.r9_r14],
+                    ad0=GPIO_ADDR_RESISTOR_MAP["recv"]["ad0"][hw_config.r8_r13],
+                    dev_type=hw_config.u4_type,
+                )
+            )
+            self._transmit_atten.append(
+                MAX732_8_9(
+                    dev_name="transmit_atten",
+                    i2c_bus=i2c_bus,
+                    ad2=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad2"][hw_config.r20_r23],
+                    ad1=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad1"][hw_config.r19_r22],
+                    ad0=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad0"][hw_config.r18_r21],
+                    dev_type=hw_config.u8_type,
+                )
+            )
+            # add attributes to store current attenuation values
+            self._recv_atten[chn_idx].value_dB = 0.0
+            self._transmit_atten[chn_idx].value_dB = 0.0
         self._latch_bit = [
             atten_map["bit"]
             for atten_map in list(ATTEN_CONN_MAP.values())
             if atten_map["atten"] == "latch"
         ][0]
-        # add attributes to store current attenuation values
-        self._recv_atten.value_dB = 0.0
-        self._transmit_atten.value_dB = 0.0
         self.set_attenuation("recv_atten", 0.0)
         self.set_attenuation("transmit_atten", 0.0)
 
     def set_attenuation(
-        self, dev_name: Literal["recv_atten", "transmit_atten"], attenuation_dB: float
+        self,
+        chn_idx: int,
+        dev_name: Literal["recv_atten", "transmit_atten"],
+        attenuation_dB: float,
     ) -> None:
         if not (0 <= attenuation_dB <= 31.5):
             raise ValueError("attenuation_dB must be between 0 and 31.5 dB.")
@@ -120,42 +136,51 @@ class SOUK_RF_Mixerless_Module_A:
                     if attens_map["atten"] == 0.5 * (2**bit):
                         atten_states[attens_map["bit"]] = True
                         atten_bits_list.append(attens_map["bit"])
-        for selfattr in dir(self):
-            if isinstance(getattr(self, selfattr), MAX732_8_9):
-                if dev_name == getattr(self, selfattr).dev_name:
-                    target_attenuator: MAX732_8_9 = getattr(self, selfattr)
-                    break
+        if chn_idx >= self._n_channels or chn_idx < 0:
+            raise ValueError(f"Invalid channel index: {chn_idx}.")
+        for selfattr_str in dir(self):
+            selfattr: List[MAX732_8_9] = getattr(self, selfattr_str)
+            if isinstance(selfattr, list):
+                if all(
+                    isinstance(selfattr_item, MAX732_8_9) for selfattr_item in selfattr
+                ):
+                    if dev_name == selfattr[chn_idx].dev_name:
+                        target_attenuator: MAX732_8_9 = selfattr[chn_idx]
+                        break
         target_attenuator.set_gpio_bit(bits=atten_bits_list, states=atten_states)
         target_attenuator.pulse_gpio_bit(bit=self._latch_bit, pulse_width_ms=10)
         target_attenuator.value_dB = tap_pos * 0.5
         logging.info(f"Set {dev_name} attenuation to {target_attenuator.value_dB} dB.")
 
-    @property
-    def recv_attenuation(self) -> float:
-        return self._recv_atten.value_dB
+    def recv_attenuation_value(self, chn_idx: int) -> float:
+        return self._recv_atten[chn_idx].value_dB
 
-    @property
-    def transmit_attenuation(self) -> float:
-        return self._transmit_atten.value_dB
+    def transmit_attenuation_value(self, chn_idx: int) -> float:
+        return self._transmit_atten[chn_idx].value_dB
 
     def bypass_amplifier(
-        self, dev_name: Literal["recv_atten", "transmit_atten"], bypass: bool
+        self,
+        chn_idx: int,
+        dev_name: Literal["recv_atten", "transmit_atten"],
+        bypass: bool,
     ) -> None:
-        for selfattr in dir(self):
-            if isinstance(getattr(self, selfattr), MAX732_8_9):
-                if dev_name == getattr(self, selfattr).dev_name:
-                    target_attenuator: MAX732_8_9 = getattr(self, selfattr)
-                    break
+        for selfattr_str in dir(self):
+            selfattr: List[MAX732_8_9] = getattr(self, selfattr_str)
+            if isinstance(selfattr, list):
+                if all(
+                    isinstance(selfattr_item, MAX732_8_9) for selfattr_item in selfattr
+                ):
+                    if dev_name == selfattr[chn_idx].dev_name:
+                        target_attenuator: MAX732_8_9 = selfattr[chn_idx]
+                        break
         target_attenuator.set_gpio_bit(bits=[AMP_BYPASS_BIT], states=[bypass])
         state_str = "bypassed" if bypass else "enabled"
-        logging.info(f"Amplifier on {dev_name} is {state_str}.")
+        logging.info(f"Amplifier on channel {chn_idx} {dev_name} is {state_str}.")
 
-    @property
-    def recv_amplifier_bypass(self) -> bool:
-        states = self._recv_atten.get_gpio_bit(bits=[AMP_BYPASS_BIT])
+    def recv_amplifier_bypass_state(self, chn_idx: int) -> bool:
+        states = self._recv_atten[chn_idx].get_gpio_bit(bits=[AMP_BYPASS_BIT])
         return states[0]
 
-    @property
-    def transmit_amplifier_bypass(self) -> bool:
-        states = self._transmit_atten.get_gpio_bit(bits=[AMP_BYPASS_BIT])
+    def transmit_amplifier_bypass_state(self, chn_idx: int) -> bool:
+        states = self._transmit_atten[chn_idx].get_gpio_bit(bits=[AMP_BYPASS_BIT])
         return states[0]
