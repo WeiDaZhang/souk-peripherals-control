@@ -145,14 +145,13 @@ class SOUKRFMixerlessModule:
         if not (0 <= attenuation_dB <= 31.5):
             raise ValueError("attenuation_dB must be between 0 and 31.5 dB.")
         tap_pos = int(attenuation_dB * 2)  # each step is 0.5 dB
-        atten_bits_list = []
+        atten_bits_list = list(range(6))
         atten_states = 6 * [False]
-        for bit in range(6):
+        for bit in atten_bits_list:
             if tap_pos >> bit & 0x01 == 1:
                 for attens_map in list(ATTEN_CONN_MAP.values()):
                     if attens_map["atten"] == 0.5 * (2**bit):
                         atten_states[attens_map["bit"]] = True
-                        atten_bits_list.append(attens_map["bit"])
         if chn_idx >= self._n_channels or chn_idx < 0:
             raise ValueError(f"Invalid channel index: {chn_idx}.")
         target_atten_amp = None
