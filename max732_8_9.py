@@ -59,6 +59,9 @@ class MAX732_8_9(I2CDevice):
     def write_gpio(self, value: int) -> None:
         if not (0 <= value <= 0xFF):
             raise ValueError("GPIO value must be an 8-bit unsigned integer (0 to 255).")
+        logging.debug(
+            f"Written GPIO value: {value:#04x} at device {self.dev_name}, address {self.dev_addr:#04x}"
+        )
         self.write(data=value, register=0x00)
 
     def get_gpio_bit(self, bits: List[int]) -> List[bool]:
