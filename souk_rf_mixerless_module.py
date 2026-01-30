@@ -78,7 +78,7 @@ class SOUKRFMixerlessModuleChnHWConfig:
 
 @dataclass
 class SOUKRFMixerlessModuleChnAttenAmp:
-    chn_idx: int = field(init=False)
+    chn_idx: int
     atten_amp: MAX732_8_9 = field(init=False)
     atten_value_dB: float = field(default=0.0)
     amp_bypass: bool = field(default=False)
