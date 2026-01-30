@@ -54,7 +54,7 @@ class MAX732_8_9(I2CDevice):
         super().__init__(dev_name, i2c_bus, dev_addr)
 
     def read_gpio(self) -> int:
-        return self.read(length=1, register=0x00)[0]
+        return self.read()  # length=1, register=0x00)[0]
 
     def write_gpio(self, value: int) -> None:
         if not (0 <= value <= 0xFF):
@@ -62,7 +62,7 @@ class MAX732_8_9(I2CDevice):
         logging.debug(
             f"Written GPIO value: {value:#04x} at device {self.dev_name}, address {self.dev_addr:#04x}"
         )
-        self.write(data=value, register=0x00)
+        self.write(data=value)  # , register=0x00)
 
     def get_gpio_bit(self, bits: List[int]) -> List[bool]:
         mask = 0
