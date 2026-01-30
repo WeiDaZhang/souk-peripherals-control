@@ -77,7 +77,9 @@ class MAX732_8_9(I2CDevice):
 
     def set_gpio_bit(self, bits: List[int], states: List[bool]) -> None:
         if len(bits) != len(states):
-            raise ValueError("Length of bits and states must be the same.")
+            raise ValueError(
+                f"Length of bits {len(bits)} and states {len(states)} must be the same."
+            )
         current_value = self.read_gpio()
         new_value = current_value
         for bit, state in zip(bits, states):
