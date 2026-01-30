@@ -166,6 +166,9 @@ class SOUKRFMixerlessModule:
             raise ValueError(
                 f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
             )
+        logging.debug(
+            f"Setting {dev_name} on channel {chn_idx} with bits {atten_bits_list} to states {atten_states} for {attenuation_dB} dB."
+        )
         target_atten_amp.atten_amp.set_gpio_bit(
             bits=atten_bits_list, states=atten_states
         )
