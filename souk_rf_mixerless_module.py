@@ -215,7 +215,9 @@ class SOUKRFMixerlessModule:
             raise ValueError(
                 f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
             )
-        target_atten_amp.atten_amp.set_gpio_bit(bits=[AMP_BYPASS_BIT], states=[bypass])
+        target_atten_amp.atten_amp.set_gpio_bit(
+            bits=[AMP_BYPASS_BIT], states=[not bypass]
+        )
         target_atten_amp.amp_bypass = bypass
         state_str = "bypassed" if bypass else "enabled"
         logging.info(f"Amplifier on channel {chn_idx} {dev_name} is {state_str}.")
@@ -235,7 +237,7 @@ class SOUKRFMixerlessModule:
             raise ValueError(
                 f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
             )
-        states = target_atten_amp.atten_amp.get_gpio_bit(bits=[AMP_BYPASS_BIT])
+        states = not target_atten_amp.atten_amp.get_gpio_bit(bits=[AMP_BYPASS_BIT])
         return states[0]
 
 
