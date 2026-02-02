@@ -35,6 +35,15 @@ class LTC2481CDDHWConfig:
     )
     V_OPERATION: float = 5.0  # in volts
 
+    @classmethod
+    def default_config(cls):
+        return cls(
+            CA0="float",
+            CA1="float",
+            REFERENCES={True: 5.0, False: 0.0},
+            V_OPERATION=5.0,
+        )
+
 
 @dataclass
 class LTC2481CDDConfig:

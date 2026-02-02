@@ -29,6 +29,21 @@ class LNAMonitorHWConfig:
         if self.i_set_LDO != 0.1e-3:
             raise ValueError("i_set_LDO must NOT be changed.")
 
+    @classmethod
+    def default_config(cls):
+        return cls(
+            r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig.default_config(),
+            remote_adc_hw_config=LTC2481CDDHWConfig(
+                CA0="low",
+                CA1="float",
+            ),
+            imonitor_adc_hw_config=LTC2481CDDHWConfig.default_config(),
+            switch_status=True,
+            r_RTop1_kOhm=18.0,
+            r_RBot1_kOhm=18.0,
+            r_RAdj1_kOhm=18.0,
+        )
+
 
 class LNAMonitor:
     def __init__(self, i2c_bus: SMBus, hw_config: LNAMonitorHWConfig):

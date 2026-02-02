@@ -11,6 +11,14 @@ class AD511_0_2_4BCPZ_5_10_80HWConfig:
     R_FULL_SCALE_KOHM: Literal[5, 10, 80]
     DEV_ADDR: Literal[0x2C, 0x2F]
 
+    @classmethod
+    def default_config(cls):
+        return cls(
+            RESOLUTION=128,
+            R_FULL_SCALE_KOHM=10,
+            DEV_ADDR=0x2C,
+        )
+
 
 @dataclass(frozen=True)
 class AD511_0_2_4BCPZ_5_10_80CMD:

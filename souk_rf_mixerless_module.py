@@ -75,6 +75,19 @@ class SOUKRFMixerlessModuleChnHWConfig:
         if self.u8_type not in ["MAX7328", "MAX7329"]:
             raise ValueError("u8_type must be either 'MAX7328' or 'MAX7329'")
 
+    @classmethod
+    def default_config(cls):
+        return cls(
+            r8_r13="R8",
+            r9_r14="R9",
+            r12_r17="R12",
+            r18_r21="R18",
+            r19_r22="R19",
+            r20_r23="R20",
+            u4_type="MAX7329",
+            u8_type="MAX7329",
+        )
+
 
 @dataclass
 class SOUKRFMixerlessModuleChnAttenAmp:
