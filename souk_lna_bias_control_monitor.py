@@ -447,9 +447,16 @@ def main():
         default=False,
         help="Blindly setting remote voltage",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=False,
+        help="Enable debug mode logging",
+    )
+
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
 
     i2c_bus = SMBus(0)
 
