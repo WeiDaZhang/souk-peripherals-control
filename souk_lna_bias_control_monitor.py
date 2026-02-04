@@ -1,5 +1,6 @@
 from typing import List, Literal, Dict, Tuple, Union
 from dataclasses import dataclass
+import logging
 
 from lna_voltages_utils import v_remote
 from smbus2 import SMBus
@@ -146,7 +147,7 @@ class SOUKLNABiasControlMonitor:
             chn (int): The channel number (1-14), or
             chn (list[int]): A list of channel numbers.
         Returns:
-            dict[int, dict[str, float]]: The lna status values as {chn: {"remote": ..., "local": ..., "bias": ...}}.
+            dict[int, dict[str, float]]: The lna status values as {chn: {"remote voltage": ..., "local voltage": ..., "bias current": ...}}.
         """
         if isinstance(chn, int):
             chn = [chn]
@@ -166,16 +167,16 @@ class SOUKLNABiasControlMonitor:
             lna_monitor = self._lna_monitors.get(refdes, None)
             if lna_monitor is None:
                 status[c] = {
-                    "remote": float("nan"),
-                    "local": float("nan"),
-                    "bias": float("nan"),
+                    "remote voltage": float("nan"),
+                    "local voltage": float("nan"),
+                    "bias current": float("nan"),
                 }
             else:
                 self._turn_on_channel(c)
                 status[c] = {
-                    "remote": lna_monitor.read_remote_voltage(),
-                    "local": lna_monitor.read_local_voltage(),
-                    "bias": lna_monitor.read_bias_current(),
+                    "remote voltage": lna_monitor.read_remote_voltage(),
+                    "local voltage": lna_monitor.read_local_voltage(),
+                    "bias current": lna_monitor.read_bias_current(),
                 }
                 self._turn_off_all_channels()
         return status
@@ -386,27 +387,33 @@ def read_set_local_voltage_demo(
 
     while True:
         lna_local_range = souk_lna_monitor.lna_local_voltage_ranges
-        print(lna_local_range)
-
         for chn in chn_idxes:
             v_min, v_max = lna_local_range[chn]
             if any(math.isnan(v_range) for v_range in (v_min, v_max)):
-                print(f"Skipping LNA chn {chn} as it is not configured.")
+                logging.info(f"Skipping LNA chn {chn} as it is not configured.")
                 continue
+            else:
+                logging.info(
+                    f"LNA chn {chn} local voltage range: {v_min:.3f} V - {v_max:.3f} V"
+                )
             v_set = random.uniform(v_min, v_max)
             actual_v_set = souk_lna_monitor.set_lna_bias_local(chn=chn, v_local=v_set)
-            print(
+            logging.info(
                 f"Set LNA chn {chn} local voltage to {v_set:.3f} V, actual: {actual_v_set[chn]:.3f} V"
             )
 
         time.sleep(5)
         status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
-        print(status)
+        for chn in chn_idxes:
+            logging.info(
+                f"LNA chn {chn} status: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
+                + f"Local Voltage = {status[chn]['local voltage']:.3f} V, "
+                + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
+            )
         time.sleep(10)
 
 
 def main():
-    import logging
     import argparse
 
     parser = argparse.ArgumentParser(description="SOUK LNA Bias Control Monitor")
@@ -424,6 +431,9 @@ def main():
     )
     parser.add_argument(
         "--remote", action="store_true", help="Demo for setting remote voltage"
+    )
+    parser.add_argument(
+        "--status", action="store_true", help="Demo for getting LNA bias status"
     )
     parser.add_argument(
         "--value",
@@ -561,7 +571,19 @@ def main():
         result = souk_lna_monitor.set_lna_bias_remote(
             chn=args.channels, v_local=args.value, blind=args.blind
         )
-        print(result)
+        for chn in args.channels:
+            logging.info(
+                f"Set LNA chn {chn} remote voltage to {args.value:.3f} V, "
+                + f"actual: {result[chn][0]:.3f} V, message: {result[chn][1]}"
+            )
+    if args.status:
+        status = souk_lna_monitor.read_lna_status(chn=args.channels)
+        for chn in args.channels:
+            logging.info(
+                f"LNA chn {chn} status: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
+                + f"Local Voltage = {status[chn]['local voltage']:.3f} V, "
+                + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
+            )
 
 
 if __name__ == "__main__":
