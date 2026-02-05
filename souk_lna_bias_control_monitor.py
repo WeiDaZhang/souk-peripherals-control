@@ -456,7 +456,12 @@ def main():
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        filename="souk_lna_bias_control_monitor.log",
+        filemode="w",
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
 
     i2c_bus = SMBus(0)
 
