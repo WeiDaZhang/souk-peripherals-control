@@ -296,6 +296,14 @@ class SOUKLNABiasControlMonitor:
             if lna_monitor is None:
                 actual_v_locals[c] = (float("nan"), "LNA monitor not configured.")
             else:
+                status = self.read_lna_status(
+                    chn=c
+                )  # read initial status to check if channel is working before setting voltage
+                logging.info(
+                    f"LNA chn {c} status: Remote Voltage = {status[c]['remote voltage']:.3f} V, "
+                    + f"Local Voltage = {status[c]['local voltage']:.3f} V, "
+                    + f"Bias Current = {status[c]['bias current'] * 1e3:.3f} mA"
+                )
                 self._turn_on_channel(c)
                 local_voltage_range = lna_monitor.local_voltage_range
                 # set to lowest local voltage first
