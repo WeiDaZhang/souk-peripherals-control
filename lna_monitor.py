@@ -155,9 +155,11 @@ class LNAMonitor:
         logging.debug(f"Local voltage: {v_local:.3f} V")
         v_remote = self._remote_adc.read_voltage(dump_first=dump_first)
         logging.debug(f"Remote voltage: {v_remote:.3f} V")
-        v_top_drop = (
-            v_local - self._imonitor_adc.read_voltage(dump_first=dump_first) - v_remote
+        v_sense = self._imonitor_adc.read_voltage(dump_first=dump_first)
+        logging.debug(
+            f"Bias current: {v_sense / self._hw_config.r_RSENSE_OHMS * 1000:.3f} mA"
         )
+        v_top_drop = v_local - v_sense - v_remote
         logging.debug(f"Top drop voltage: {v_top_drop:.3f} V")
         return {
             "v_lna": v_remote - v_top_drop,
