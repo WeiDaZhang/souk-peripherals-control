@@ -311,7 +311,7 @@ class SOUKLNABiasControlMonitor:
                             > 0
                         ):
                             actual_v_locals[c] = (
-                                estimate_v_remotes[c][-1],
+                                estimate_v_remotes[c][-1]["v_remote"],
                                 f"Cannot set remote voltage for channel {c}, "
                                 + f"because estimated LNA voltage is not between 0 V and remote voltage {estimate_v_remotes[c][-1]['v_remote']:.3f} V. "
                                 + "Resistor values or switch status may be incorrect for this channel.",
