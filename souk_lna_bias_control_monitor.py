@@ -458,9 +458,11 @@ def main():
 
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
-        filename="souk_lna_bias_control_monitor.log",
-        filemode="w",
         format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler("souk_lna_bias_control_monitor.log", mode="w"),
+            logging.StreamHandler(),
+        ],
     )
 
     i2c_bus = SMBus(0)
