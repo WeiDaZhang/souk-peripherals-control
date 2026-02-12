@@ -37,6 +37,25 @@ def v_remote(v_source, r_meas, r_highside, r_lowside, i_meas):
 
 
 I_MEAS_DATA = {1.15: 2.53e-3, 1.16: 2.71e-3, 1.2: 3.41e-3, 1.25: 4.29e-3}
+I_MEAS_DATA = {
+    0.939: 0.004182,
+    0.9414999999999999: 0.004247,
+    0.9420000000000001: 0.004269,
+    0.9490000000000001: 0.004432,
+    0.9494999999999999: 0.004450999999999999,
+    0.9535: 0.004529,
+    0.958: 0.0046559999999999995,
+    0.9594999999999999: 0.004692999999999999,
+    0.9884999999999999: 0.005415,
+    0.9920000000000001: 0.0055119999999999995,
+    0.9944999999999999: 0.005545,
+    0.994: 0.005558,
+    0.9954999999999999: 0.005602,
+    0.997: 0.005634999999999999,
+    0.9984999999999999: 0.0056689999999999996,
+    1.0005000000000002: 0.0057220000000000005,
+    1.0025: 0.0057729999999999995,
+}
 
 
 def v_remote_from_data(v_source_values, r_meas, r_highside, r_lowside):
@@ -72,17 +91,15 @@ def main():
     r_switched = 10000  # Ohms
     r_fixed = 18000  # Ohms
     r_highside = 30  # Ohms
-    r_lowside = 30  # Ohms
+    r_lowside = 15  # Ohms
     r_meas = 100  # 1 kOhm DUT
-    r_paral = 18000  # Ohms
+    # r_paral = 18000  # Ohms
 
     # Potentiometer is the main variable
     r_pot_values = np.linspace(0, 10000, 128)  # 0 to 10k Ohms
 
     # R parallel resistance is the secondary variable
-    r_paral_values = np.array(
-        [18000, 36000, 120000]
-    )  # np.linspace(10000, 20000, 5)  # Ohms #
+    r_paral_values = np.array([18000, 1e7])  # np.linspace(10000, 20000, 5)  # Ohms #
     # R switched resistance is the secondary variable
     r_switched_values = np.array([18000])  # np.linspace(10000, 20000, 5)  # Ohms #
     # R fixed resistance is the secondary variable

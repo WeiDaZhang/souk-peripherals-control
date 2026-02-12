@@ -483,7 +483,7 @@ def main():
                 r_LDO_set_kOhm=82.0,
                 r_RTop1_kOhm=18.0,
                 r_RBot1_kOhm=18.0,
-                r_RAdj1_kOhm=18.0,
+                r_RAdj1_kOhm=1e6,
             ),
             "M18": None,
             "M19": None,
