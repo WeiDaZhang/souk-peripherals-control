@@ -292,6 +292,9 @@ class SOUKLNABiasControlMonitor:
                 for key, value in REFDES_LNA_MONITOR_CHN_MAP.items()
                 if list(value.keys())[0] == c
             )
+            logging.info(
+                f"Setting LNA chn {c} at REFDES {refdes} to target remote voltage {v:.3f} V (blind={blind})..."
+            )
             lna_monitor = self._lna_monitors.get(refdes, None)
             if lna_monitor is None:
                 actual_v_locals[c] = (float("nan"), "LNA monitor not configured.")
@@ -415,6 +418,8 @@ def read_set_local_voltage_demo(
 
 def main():
     import argparse
+    from datetime import datetime
+    import os
 
     parser = argparse.ArgumentParser(description="SOUK LNA Bias Control Monitor")
     parser.add_argument(
@@ -456,14 +461,21 @@ def main():
 
     args = parser.parse_args()
 
+    now = datetime.now()
+    datetime_str = now.strftime("%Y-%m-%d_%H-%M-%S")
+
+    os.makedirs(".logdata", exist_ok=True)
     logging.basicConfig(
         level=logging.DEBUG if args.debug else logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler("souk_lna_bias_control_monitor.log", mode="w"),
+            logging.FileHandler(
+                f"souk_lna_bias_control_monitor_{datetime_str}.log", mode="w"
+            ),
             logging.StreamHandler(),
         ],
     )
+    logging.info("arguments: " + str(args))
 
     i2c_bus = SMBus(0)
 

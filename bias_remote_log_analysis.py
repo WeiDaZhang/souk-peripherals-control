@@ -14,6 +14,7 @@ Usage:
 If output CSV path is omitted, writes to ./extracted_debug.csv
 """
 
+from dataclasses import dataclass
 import sys
 import re
 import csv
@@ -34,6 +35,24 @@ PREFIX_RE = re.compile(
     r".*?(DEBUG - (Local voltage|Remote voltage|Bias current|Top drop voltage))"
     r":?\s*(.*)"
 )
+
+
+@dataclass
+class ExtractedDataPoint:
+    start_line: int
+    end_line: int
+    local_voltage: float
+    remote_voltage: float
+    bias_current: float
+    top_drop_voltage: float
+    estimated_lna_voltage: float = 0.0
+
+    def __post_init__(self):
+        self.local_voltage = float(self.local_voltage.removesuffix(" V"))
+        self.remote_voltage = float(self.remote_voltage.removesuffix(" V"))
+        self.bias_current = float(self.bias_current.removesuffix(" mA")) / 1000
+        self.top_drop_voltage = float(self.top_drop_voltage.removesuffix(" V"))
+        self.estimated_lna_voltage = self.remote_voltage - self.top_drop_voltage
 
 
 def scan_matches(log_path: Path) -> List[Tuple[int, str, str]]:
@@ -118,35 +137,27 @@ def group_sequences(
                 next_line = grab_next_nonempty_line(lines, lineno_k)
                 group[key] = (lineno_k, next_line)
         # Build a clean result dict mapping short names to values
-        result = {
-            "local_voltage": group[PREFIXES[0]][1],
-            "remote_voltage": group[PREFIXES[1]][1],
-            "bias_current": group[PREFIXES[2]][1],
-            "top_drop_voltage": group[PREFIXES[3]][1],
-            "start_line": group[PREFIXES[0]][0],
-            "end_line": group[PREFIXES[3]][0],
-        }
+        # result = {
+        #     "local_voltage": group[PREFIXES[0]][1],
+        #     "remote_voltage": group[PREFIXES[1]][1],
+        #     "bias_current": group[PREFIXES[2]][1],
+        #     "top_drop_voltage": group[PREFIXES[3]][1],
+        #     "start_line": group[PREFIXES[0]][0],
+        #     "end_line": group[PREFIXES[3]][0],
+        # }
+        result = ExtractedDataPoint(
+            start_line=group[PREFIXES[0]][0],
+            end_line=group[PREFIXES[3]][0],
+            local_voltage=group[PREFIXES[0]][1],
+            remote_voltage=group[PREFIXES[1]][1],
+            bias_current=group[PREFIXES[2]][1],
+            top_drop_voltage=group[PREFIXES[3]][1],
+        )
         results.append(result)
     return results
 
 
-def write_csv(results: List[Dict], outpath: Path):
-    headers = [
-        "start_line",
-        "end_line",
-        "local_voltage",
-        "remote_voltage",
-        "bias_current",
-        "top_drop_voltage",
-    ]
-    with outpath.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=headers)
-        writer.writeheader()
-        for r in results:
-            writer.writerow({k: r.get(k, "") for k in headers})
-
-
-def print_results(results: List[Dict]):
+def print_results(results: List[ExtractedDataPoint]):
     if not results:
         print(
             "No complete sequences found (the four prefixes did not appear in order)."
@@ -155,23 +166,19 @@ def print_results(results: List[Dict]):
     # pretty print table-like
     print(f"Found {len(results)} sequence(s):\n")
     for idx, r in enumerate(results, start=1):
-        print(f"Sequence {idx}  (lines {r['start_line']}..{r['end_line']}):")
-        print(f"  Local voltage  : {r['local_voltage']}")
-        print(f"  Remote voltage : {r['remote_voltage']}")
-        print(f"  Bias current   : {r['bias_current']}")
-        print(f"  Top drop volt. : {r['top_drop_voltage']}")
+        print(f"Sequence {idx}  (lines {r.start_line}..{r.end_line}):")
+        print(f"  Local voltage  : {r.local_voltage} V")
+        print(f"  Remote voltage : {r.remote_voltage} V")
+        print(f"  Bias current   : {r.bias_current} mA")
+        print(f"  Top drop voltage. : {r.top_drop_voltage} V")
+        print(f"  Estimated LNA voltage: {r.estimated_lna_voltage} V")
         print("-" * 60)
 
-    i_meas_data = {}
-    for r in results:
-        i_meas_data[
-            float(r["remote_voltage"].removesuffix(" V"))
-            - float(r["top_drop_voltage"].removesuffix(" V")) / 2
-        ] = float(r["bias_current"].removesuffix(" mA")) / 1000
-    print("\nExtracted I_meas data points (V_bias, I_meas):")
-    print(",\n    ".join([f"{k}: {v}" for k, v in i_meas_data.items()]))
     plt.figure()
-    plt.scatter(list(i_meas_data.keys()), [v * 1000 for v in i_meas_data.values()])
+    plt.scatter(
+        [result.estimated_lna_voltage for result in results],
+        [result.bias_current * 1000 for result in results],
+    )
     plt.xlabel("V bias estimated across LNA (V)")
     plt.ylabel("I meas (mA)")
     plt.grid()
