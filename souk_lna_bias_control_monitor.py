@@ -470,7 +470,7 @@ def main():
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler(
-                f"souk_lna_bias_control_monitor_{datetime_str}.log", mode="w"
+                f".logdata/souk_lna_bias_control_monitor_{datetime_str}.log", mode="w"
             ),
             logging.StreamHandler(),
         ],
