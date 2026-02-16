@@ -20,6 +20,8 @@ import re
 import csv
 from pathlib import Path
 from typing import List, Tuple, Dict
+from collections import defaultdict
+
 import matplotlib.pyplot as plt
 
 # The exact ordered prefixes we look for (in this order).
@@ -52,7 +54,7 @@ class ExtractedDataPoint:
         self.remote_voltage = float(self.remote_voltage.removesuffix(" V"))
         self.bias_current = float(self.bias_current.removesuffix(" mA")) / 1000
         self.top_drop_voltage = float(self.top_drop_voltage.removesuffix(" V"))
-        self.estimated_lna_voltage = self.remote_voltage - self.top_drop_voltage
+        self.estimated_lna_voltage = self.remote_voltage - self.top_drop_voltage / 2
 
 
 def scan_matches(log_path: Path) -> List[Tuple[int, str, str]]:
@@ -157,15 +159,15 @@ def group_sequences(
     return results
 
 
-def print_results(results: List[ExtractedDataPoint]):
+def print_results(results: List[ExtractedDataPoint], start_idx=0, end_idx=-1):
     if not results:
         print(
             "No complete sequences found (the four prefixes did not appear in order)."
         )
         return
     # pretty print table-like
-    print(f"Found {len(results)} sequence(s):\n")
-    for idx, r in enumerate(results, start=1):
+    print(f"Print {end_idx - start_idx + 1} sequence(s):\n")
+    for idx, r in enumerate(results[start_idx:end_idx], start=1):
         print(f"Sequence {idx}  (lines {r.start_line}..{r.end_line}):")
         print(f"  Local voltage  : {r.local_voltage} V")
         print(f"  Remote voltage : {r.remote_voltage} V")
@@ -174,10 +176,25 @@ def print_results(results: List[ExtractedDataPoint]):
         print(f"  Estimated LNA voltage: {r.estimated_lna_voltage} V")
         print("-" * 60)
 
+    # print in {v bias: i meas} format
+    groups = defaultdict(list)
+
+    # Group currents by rounded voltage
+    for r in results[start_idx:end_idx]:
+        v = round(r.estimated_lna_voltage, 3)
+        i = r.bias_current
+        groups[v].append(i)
+
+    print("\nV bias vs I meas: {")
+    for v in sorted(groups):
+        avg_i = sum(groups[v]) / len(groups[v])
+        print(f"  {v:.3f}: {avg_i:1.3e},")
+    print("}")
+
     plt.figure()
     plt.scatter(
-        [result.estimated_lna_voltage for result in results],
-        [result.bias_current * 1000 for result in results],
+        [result.estimated_lna_voltage for result in results[start_idx:end_idx]],
+        [result.bias_current * 1000 for result in results[start_idx:end_idx]],
     )
     plt.xlabel("V bias estimated across LNA (V)")
     plt.ylabel("I meas (mA)")
@@ -186,11 +203,11 @@ def print_results(results: List[ExtractedDataPoint]):
 
 
 def main():
-    log_path = Path(".logdata/souk_lna_bias_control_monitor.log")
+    log_path = Path(".logdata/souk_lna_bias_control_monitor_2025-12-05_14-18-56.log")
     matches, lines = scan_matches(log_path)
     results = group_sequences(matches, lines)
 
-    print_results(results)
+    print_results(results, start_idx=130)
 
 
 if __name__ == "__main__":
