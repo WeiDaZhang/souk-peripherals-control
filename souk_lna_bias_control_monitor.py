@@ -541,9 +541,10 @@ def main():
                 ),
                 switch_status=True,
                 r_LDO_set_kOhm=82.0,
-                r_RTop1_kOhm=18.0,
-                r_RBot1_kOhm=18.0,
-                r_RAdj1_kOhm=18.0,
+                r_RTop1_kOhm=10.0,
+                r_RBot1_kOhm=14.5,
+                r_RAdj1_kOhm=1e6,
+                r_RSENSE_OHMS=10.0,
             ),
             "M29": LNAMonitorHWConfig(
                 r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig(
