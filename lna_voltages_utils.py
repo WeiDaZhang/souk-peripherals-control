@@ -226,9 +226,9 @@ def v_remote_from_data(v_source_values, r_meas, r_highside, r_lowside):
 
 def main():
     # Fixed resistances
-    r_LDO_set = 82000  # Ohms
+    r_LDO_set = 150000  # Ohms
     r_switched = 10000  # Ohms
-    r_fixed = 14500  # Ohms
+    r_fixed = 12400  # Ohms
     r_highside = 30  # Ohms
     r_lowside = 30  # Ohms
     r_meas = 10  # 1 kOhm DUT
@@ -293,7 +293,7 @@ def main():
     plt.plot(
         r_pot_values,
         np.array(v_remote_closed_from_data_list).T,
-        label="V_remote (Switch Closed) From Data",
+        label=f"V_remote (Switch Closed) From Data: min {min(v_remote_closed_from_data_list[0]):.3f} V, max {max(v_remote_closed_from_data_list[-1]):.3f} V",
         color="purple",
         marker="o",
         markersize=2,
