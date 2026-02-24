@@ -101,7 +101,7 @@ class SOUKRFMixerlessModule:
     def __init__(
         self, i2c_bus: SMBus, hw_config_list: List[SOUKRFMixerlessModuleChnHWConfig]
     ):
-        if len(hw_config_list) >= 2:
+        if len(hw_config_list) > 2:
             raise ValueError("Only up to 2 channels are supported.")
         else:
             self._n_channels = len(hw_config_list)
