@@ -279,6 +279,11 @@ def main():
         action="store_true",
         help="Set amplifier to bypass mode if set; otherwise, set to normal mode.",
     )
+    parser.add_argument(
+        "--get",
+        action="store_true",
+        help="Get the current attenuation value and amplifier bypass state of all channels and paths.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG)
@@ -307,15 +312,29 @@ def main():
         ),  # Module B
     ]
     rfmixerless_module = SOUKRFMixerlessModule(i2c_bus, hw_config_list)
-    for chn_idx in args.channels:
-        dev_name = "recv_atten" if args.recv else "transmit_atten"
-        rfmixerless_module.set_attenuation(chn_idx, dev_name, args.value)
-        current_atten = rfmixerless_module.get_attenuation(chn_idx, dev_name)
-        print(f"Channel {chn_idx} {dev_name} attenuation set to {current_atten} dB.")
-        rfmixerless_module.set_amp_bypass_state(chn_idx, dev_name, args.bypass)
-        current_bypass = rfmixerless_module.get_amp_bypass_state(chn_idx, dev_name)
-        bypass_str = "bypassed" if current_bypass else "enabled"
-        print(f"Channel {chn_idx} {dev_name} amplifier is {bypass_str}.")
+    if args.get:
+        for chn_idx in args.channels:
+            for dev_name in ["recv_atten", "transmit_atten"]:
+                current_atten = rfmixerless_module.get_attenuation(chn_idx, dev_name)
+                current_bypass = rfmixerless_module.get_amp_bypass_state(
+                    chn_idx, dev_name
+                )
+                bypass_str = "bypassed" if current_bypass else "enabled"
+                print(
+                    f"Channel {chn_idx} {dev_name} attenuation: {current_atten} dB, amplifier is {bypass_str}."
+                )
+    else:
+        for chn_idx in args.channels:
+            dev_name = "recv_atten" if args.recv else "transmit_atten"
+            rfmixerless_module.set_attenuation(chn_idx, dev_name, args.value)
+            current_atten = rfmixerless_module.get_attenuation(chn_idx, dev_name)
+            print(
+                f"Channel {chn_idx} {dev_name} attenuation set to {current_atten} dB."
+            )
+            rfmixerless_module.set_amp_bypass_state(chn_idx, dev_name, args.bypass)
+            current_bypass = rfmixerless_module.get_amp_bypass_state(chn_idx, dev_name)
+            bypass_str = "bypassed" if current_bypass else "enabled"
+            print(f"Channel {chn_idx} {dev_name} amplifier is {bypass_str}.")
 
 
 if __name__ == "__main__":
