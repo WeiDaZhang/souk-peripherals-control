@@ -154,9 +154,15 @@ class SOUKRFMixerlessModule:
                 chn_idx, "transmit_atten"
             )  # initialize amp bypass state from hardware
 
+    @property
+    def n_channels(self) -> int:
+        return self._n_channels
+
     def _get_atten_amp(
         self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
     ) -> SOUKRFMixerlessModuleChnAttenAmp:
+        if chn_idx >= self._n_channels or chn_idx < 0:
+            raise ValueError(f"Invalid channel index: {chn_idx}.")
         target_atten_amp = None
         for atten_map in self._atten_amp_channel:
             if (
@@ -187,8 +193,6 @@ class SOUKRFMixerlessModule:
                 if attens_map["atten"] == 0.5 * (2**tap_bit):
                     atten_bits_list.append(attens_map["bit"])
                     atten_states.append(tap_pos >> tap_bit & 0x01)
-        if chn_idx >= self._n_channels or chn_idx < 0:
-            raise ValueError(f"Invalid channel index: {chn_idx}.")
         target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
         logging.debug(
             f"Setting {dev_name} on channel {chn_idx} with bits {atten_bits_list} to states {atten_states} for {attenuation_dB} dB."
@@ -313,7 +317,7 @@ def main():
     ]
     rfmixerless_module = SOUKRFMixerlessModule(i2c_bus, hw_config_list)
     if args.get:
-        for chn_idx in args.channels:
+        for chn_idx in range(rfmixerless_module.n_channels):
             for dev_name in ["recv_atten", "transmit_atten"]:
                 current_atten = rfmixerless_module.get_attenuation(chn_idx, dev_name)
                 current_bypass = rfmixerless_module.get_amp_bypass_state(
