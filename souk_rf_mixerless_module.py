@@ -296,7 +296,17 @@ def main():
             r20_r23="R23",
             u4_type="MAX7329",
             u8_type="MAX7329",
-        )  # Module A
+        ),  # Module A
+        SOUKRFMixerlessModuleChnHWConfig(
+            r8_r13="R8",
+            r9_r14="R14",
+            r12_r17="R17",
+            r18_r21="R21",
+            r19_r22="R22",
+            r20_r23="R23",
+            u4_type="MAX7329",
+            u8_type="MAX7329",
+        ),  # Module B
     ]
     rfmixerless_module = SOUKRFMixerlessModule(i2c_bus, hw_config_list)
     for chn_idx in args.channels:
