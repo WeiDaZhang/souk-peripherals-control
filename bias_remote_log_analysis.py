@@ -54,7 +54,7 @@ class ExtractedDataPoint:
         self.remote_voltage = float(self.remote_voltage.removesuffix(" V"))
         self.bias_current = float(self.bias_current.removesuffix(" mA")) / 1000
         self.top_drop_voltage = float(self.top_drop_voltage.removesuffix(" V"))
-        self.estimated_lna_voltage = self.remote_voltage - self.top_drop_voltage
+        self.estimated_lna_voltage = self.remote_voltage - self.top_drop_voltage / 2
 
 
 def scan_matches(log_path: Path) -> List[Tuple[int, str, str]]:
@@ -203,7 +203,7 @@ def print_results(results: List[ExtractedDataPoint], start_idx=0, end_idx=-1):
 
 
 def main():
-    log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-17_16-10-09.log")
+    log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-20_16-05-08.log")
     matches, lines = scan_matches(log_path)
     results = group_sequences(matches, lines)
 
