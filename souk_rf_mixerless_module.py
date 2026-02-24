@@ -95,13 +95,20 @@ class SOUKRFMixerlessModuleChnAttenAmp:
     atten_amp: MAX732_8_9 = field(init=False)
     atten_value_dB: float = field(default=0.0)
     amp_bypass: bool = field(default=False)
+    atten_latch_bit: int = field(
+        default=[
+            atten_map["bit"]
+            for atten_map in list(ATTEN_CONN_MAP.values())
+            if atten_map["atten"] == "latch"
+        ][0]
+    )
 
 
 class SOUKRFMixerlessModule:
     def __init__(
         self, i2c_bus: SMBus, hw_config_list: List[SOUKRFMixerlessModuleChnHWConfig]
     ):
-        if len(hw_config_list) >= 2:
+        if len(hw_config_list) > 2:
             raise ValueError("Only up to 2 channels are supported.")
         else:
             self._n_channels = len(hw_config_list)
@@ -121,8 +128,12 @@ class SOUKRFMixerlessModule:
                 ad0=GPIO_ADDR_RESISTOR_MAP["recv"]["ad0"][hw_config.r8_r13],
                 dev_type=hw_config.u4_type,
             )
-            self._atten_amp_channel[-1].atten_value_dB = 0.0
-            self._atten_amp_channel[-1].amp_bypass = False
+            self.get_attenuation(
+                chn_idx, "recv_atten"
+            )  # initialize attenuation value from hardware
+            self.get_amp_bypass_state(
+                chn_idx, "recv_atten"
+            )  # initialize amp bypass state from hardware
             self._atten_amp_channel.append(
                 SOUKRFMixerlessModuleChnAttenAmp(
                     chn_idx=chn_idx,
@@ -136,18 +147,29 @@ class SOUKRFMixerlessModule:
                 ad0=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad0"][hw_config.r18_r21],
                 dev_type=hw_config.u8_type,
             )
-            self._atten_amp_channel[-1].atten_value_dB = 0.0
-            self._atten_amp_channel[-1].amp_bypass = False
-        self._latch_bit = [
-            atten_map["bit"]
-            for atten_map in list(ATTEN_CONN_MAP.values())
-            if atten_map["atten"] == "latch"
-        ][0]
-        for chn_idx in range(self._n_channels):
-            self.set_attenuation(chn_idx, "recv_atten", 0.0)
-            self.set_attenuation(chn_idx, "transmit_atten", 0.0)
-            self.set_amp_bypass_state(chn_idx, "recv_atten", False)
-            self.set_amp_bypass_state(chn_idx, "transmit_atten", False)
+            self.get_attenuation(
+                chn_idx, "transmit_atten"
+            )  # initialize attenuation value from hardware
+            self.get_amp_bypass_state(
+                chn_idx, "transmit_atten"
+            )  # initialize amp bypass state from hardware
+
+    def _get_atten_amp(
+        self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
+    ) -> SOUKRFMixerlessModuleChnAttenAmp:
+        target_atten_amp = None
+        for atten_map in self._atten_amp_channel:
+            if (
+                atten_map.chn_idx == chn_idx
+                and atten_map.atten_amp.dev_name == dev_name
+            ):
+                target_atten_amp = atten_map
+                break
+        if target_atten_amp is None:
+            raise ValueError(
+                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
+            )
+        return target_atten_amp
 
     def set_attenuation(
         self,
@@ -167,18 +189,7 @@ class SOUKRFMixerlessModule:
                     atten_states.append(tap_pos >> tap_bit & 0x01)
         if chn_idx >= self._n_channels or chn_idx < 0:
             raise ValueError(f"Invalid channel index: {chn_idx}.")
-        target_atten_amp = None
-        for atten_map in self._atten_amp_channel:
-            if (
-                atten_map.chn_idx == chn_idx
-                and atten_map.atten_amp.dev_name == dev_name
-            ):
-                target_atten_amp = atten_map
-                break
-        if target_atten_amp is None:
-            raise ValueError(
-                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
-            )
+        target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
         logging.debug(
             f"Setting {dev_name} on channel {chn_idx} with bits {atten_bits_list} to states {atten_states} for {attenuation_dB} dB."
         )
@@ -186,7 +197,7 @@ class SOUKRFMixerlessModule:
             bits=atten_bits_list, states=atten_states
         )
         target_atten_amp.atten_amp.pulse_gpio_bit(
-            bit=self._latch_bit, pulse_width_ms=10
+            bit=target_atten_amp.atten_latch_bit, pulse_width_ms=10
         )
         target_atten_amp.atten_value_dB = tap_pos * 0.5
         logging.info(
@@ -196,18 +207,26 @@ class SOUKRFMixerlessModule:
     def get_attenuation(
         self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
     ) -> float:
-        target_atten_amp = None
-        for atten_map in self._atten_amp_channel:
-            if (
-                atten_map.chn_idx == chn_idx
-                and atten_map.atten_amp.dev_name == dev_name
-            ):
-                target_atten_amp = atten_map
-                break
-        if target_atten_amp is None:
-            raise ValueError(
-                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
-            )
+        target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
+        atten_bits_list = target_atten_amp.atten_amp.get_gpio_bit(
+            bits=[
+                attens_map["bit"]
+                for attens_map in list(ATTEN_CONN_MAP.values())
+                if attens_map["atten"] != "latch"
+            ]
+        )
+        atten_value_dB = 0.0
+        for bit_state, atten_value in zip(
+            atten_bits_list,
+            [
+                attens_map["atten"]
+                for attens_map in list(ATTEN_CONN_MAP.values())
+                if attens_map["atten"] != "latch"
+            ],
+        ):
+            if bit_state:
+                atten_value_dB += atten_value
+        target_atten_amp.atten_value_dB = atten_value_dB
         return target_atten_amp.atten_value_dB
 
     def set_amp_bypass_state(
@@ -216,18 +235,7 @@ class SOUKRFMixerlessModule:
         dev_name: Literal["recv_atten", "transmit_atten"],
         bypass: bool,
     ) -> None:
-        target_atten_amp = None
-        for atten_map in self._atten_amp_channel:
-            if (
-                atten_map.chn_idx == chn_idx
-                and atten_map.atten_amp.dev_name == dev_name
-            ):
-                target_atten_amp = atten_map
-                break
-        if target_atten_amp is None:
-            raise ValueError(
-                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
-            )
+        target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
         target_atten_amp.atten_amp.set_gpio_bit(
             bits=[AMP_BYPASS_BIT], states=[not bypass]
         )
@@ -238,20 +246,10 @@ class SOUKRFMixerlessModule:
     def get_amp_bypass_state(
         self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
     ) -> bool:
-        target_atten_amp = None
-        for atten_map in self._atten_amp_channel:
-            if (
-                atten_map.chn_idx == chn_idx
-                and atten_map.atten_amp.dev_name == dev_name
-            ):
-                target_atten_amp = atten_map
-                break
-        if target_atten_amp is None:
-            raise ValueError(
-                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
-            )
+        target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
         states = target_atten_amp.atten_amp.get_gpio_bit(bits=[AMP_BYPASS_BIT])
-        return not states[0]
+        target_atten_amp.amp_bypass = not states[0]
+        return target_atten_amp.amp_bypass
 
 
 def main():
@@ -296,7 +294,17 @@ def main():
             r20_r23="R23",
             u4_type="MAX7329",
             u8_type="MAX7329",
-        )  # Module A
+        ),  # Module A
+        SOUKRFMixerlessModuleChnHWConfig(
+            r8_r13="R8",
+            r9_r14="R14",
+            r12_r17="R17",
+            r18_r21="R21",
+            r19_r22="R22",
+            r20_r23="R23",
+            u4_type="MAX7329",
+            u8_type="MAX7329",
+        ),  # Module B
     ]
     rfmixerless_module = SOUKRFMixerlessModule(i2c_bus, hw_config_list)
     for chn_idx in args.channels:
