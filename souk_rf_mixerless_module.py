@@ -1,5 +1,5 @@
 import logging
-from typing import Literal, Set, List
+from typing import Literal, List
 from dataclasses import dataclass, field
 
 from smbus2 import SMBus
@@ -111,7 +111,7 @@ class SOUKRFMixerlessModule:
             raise ValueError("Only up to 2 channels are supported.")
         else:
             self._n_channels = len(hw_config_list)
-        self._atten_amp_channels: Set[SOUKRFMixerlessModuleChnAttenAmp] = set()
+        self._atten_amp_channels: List[SOUKRFMixerlessModuleChnAttenAmp] = []
         self._hw_config_list = hw_config_list
         for chn_idx, hw_config in enumerate(hw_config_list):
             atten_amp_channel = SOUKRFMixerlessModuleChnAttenAmp(chn_idx=chn_idx)
@@ -129,7 +129,7 @@ class SOUKRFMixerlessModule:
             self._get_attenuation(
                 atten_amp_channel
             )  # initialize attenuation value from hardware
-            self._atten_amp_channels.add(atten_amp_channel)
+            self._atten_amp_channels.append(atten_amp_channel)
 
             atten_amp_channel = SOUKRFMixerlessModuleChnAttenAmp(chn_idx=chn_idx)
             atten_amp_channel.atten_amp = MAX732_8_9(
@@ -146,7 +146,7 @@ class SOUKRFMixerlessModule:
             self._get_attenuation(
                 atten_amp_channel
             )  # initialize attenuation value from hardware
-            self._atten_amp_channels.add(atten_amp_channel)
+            self._atten_amp_channels.append(atten_amp_channel)
 
     @property
     def n_channels(self) -> int:
