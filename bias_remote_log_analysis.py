@@ -203,11 +203,11 @@ def print_results(results: List[ExtractedDataPoint], start_idx=0, end_idx=-1):
 
 
 def main():
-    log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-17_16-10-09.log")
+    log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-20_16-05-08.log")
     matches, lines = scan_matches(log_path)
     results = group_sequences(matches, lines)
 
-    print_results(results, start_idx=130)
+    print_results(results)
 
 
 if __name__ == "__main__":
