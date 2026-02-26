@@ -108,7 +108,7 @@ class SOUKRFMixerlessModuleChnAttenAmp:
 
     @property
     def atten_value_dB(self) -> float:
-        return self.atten_amp_level.atten
+        return -self.atten_amp_level.atten
 
     @atten_value_dB.setter
     def atten_value_dB(self, value: float) -> None:
