@@ -112,7 +112,7 @@ class SOUKRFMixerlessModuleChnAttenAmp:
 
     @atten_value_dB.setter
     def atten_value_dB(self, value: float) -> None:
-        self.atten_amp_level.atten = value
+        self.atten_amp_level.atten = -value
 
     @property
     def amp_bypass(self) -> bool:
