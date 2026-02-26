@@ -5,6 +5,11 @@ from dataclasses import dataclass, field
 from smbus2 import SMBus
 
 from max732_8_9 import MAX732_8_9
+from souk_rf_mixerless_atten_amp_level import (
+    SOUKRFMixerlessAttenAmpLevel,
+    SOUKRFMixerlessRecvAttenAmpLevel,
+    SOUKRFMixerlessTransmitAttenAmpLevel,
+)
 
 ATTEN_CONN_MAP = {
     "red_conn_pin2": {"bit": 2, "atten": 2.0},
@@ -92,8 +97,7 @@ class SOUKRFMixerlessModuleChnHWConfig:
 class SOUKRFMixerlessModuleChnAttenAmp:
     chn_idx: int
     atten_amp: MAX732_8_9 = field(init=False)
-    atten_value_dB: float = field(default=0.0)
-    amp_bypass: bool = field(default=False)
+    atten_amp_level: SOUKRFMixerlessAttenAmpLevel = field(init=False)
     atten_latch_bit: int = field(
         default=[
             atten_map["bit"]
@@ -101,6 +105,22 @@ class SOUKRFMixerlessModuleChnAttenAmp:
             if atten_map["atten"] == "latch"
         ][0]
     )
+
+    @property
+    def atten_value_dB(self) -> float:
+        return self.atten_amp_level.atten
+
+    @atten_value_dB.setter
+    def atten_value_dB(self, value: float) -> None:
+        self.atten_amp_level.atten = value
+
+    @property
+    def amp_bypass(self) -> bool:
+        return self.atten_amp_level.bypass_state
+
+    @amp_bypass.setter
+    def amp_bypass(self, value: bool) -> None:
+        self.atten_amp_level.bypass_state = value
 
 
 class SOUKRFMixerlessModule:
@@ -123,6 +143,9 @@ class SOUKRFMixerlessModule:
                 ad0=GPIO_ADDR_RESISTOR_MAP["recv"]["ad0"][hw_config.r8_r13],
                 dev_type=hw_config.u4_type,
             )
+            atten_amp_channel.atten_amp_level = (
+                SOUKRFMixerlessRecvAttenAmpLevel()
+            )  # initialize attenuator level object
             self._get_amp_bypass(
                 atten_amp_channel
             )  # initialize amp bypass state from hardware
@@ -140,6 +163,9 @@ class SOUKRFMixerlessModule:
                 ad0=GPIO_ADDR_RESISTOR_MAP["transmit"]["ad0"][hw_config.r18_r21],
                 dev_type=hw_config.u8_type,
             )
+            atten_amp_channel.atten_amp_level = (
+                SOUKRFMixerlessTransmitAttenAmpLevel()
+            )  # initialize attenuator level object
             self._get_amp_bypass(
                 atten_amp_channel
             )  # initialize amp bypass state from hardware
