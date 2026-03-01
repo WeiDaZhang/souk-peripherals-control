@@ -3,30 +3,66 @@ from typing import Literal, List, Tuple
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 ZX60_53LNB_S_BYPASS_IL = -2.2
 ZX60_53LNB_S_GAIN = 20.2
-ZX60_53LNB_S_GAIN_1dB_COMP = 20.0
+ZX60_53LNB_S_GAIN_1dB_COMP = 20.0 - ZX60_53LNB_S_GAIN
 ZX60_53LNB_S_BYPASS_1dB_COMP = 33.0
 BFCV_2895_IL = -1.8
+BFCV_2895_1dB_COMP = 36.99  # max input power
 VEQY_5_63_IL = -3.5
+VEQY_5_63_1dB_COMP = 31.0  # max input power
 ZX76_31R5A_PNS_IL = -1.5
 ZX76_31R5A_PNS_RANGE = -31.5
 ZX76_31R5A_PNS_STEP = -0.5
+ZX76_31R5A_PNS_1dB_COMP = 24.0  # 0.2dB compression point
 BW_S5W2_IL = -5.0
+BW_S5W2_1dB_COMP = 33.0  # max input power
 
 
 @dataclass
-class Amplifier:
+class RFComponent:
+    _type: str = None
+    _insert_loss: float = None
+    _1dB_comp: float = None
+
+    @property
+    def type(self) -> str:
+        return self._type
+
+    @property
+    def total_gain_il(self) -> float:
+        return self._insert_loss
+
+    @property
+    def input_1dB_comp(self) -> float:
+        return self._1dB_comp
+
+
+@dataclass
+class Equalizer(RFComponent):
+    _type: str = "VEQY-5-63+"
+    _insert_loss: float = VEQY_5_63_IL
+    _1dB_comp: float = VEQY_5_63_1dB_COMP
+
+
+@dataclass
+class FixedAtten(RFComponent):
+    _type: str = "BW-S5W2+"
+    _insert_loss: float = BW_S5W2_IL
+    _1dB_comp: float = BW_S5W2_1dB_COMP
+
+
+@dataclass
+class Amplifier(RFComponent):
     _type: str = "ZX60-53LNB-S+"
     _bypass_il: float = ZX60_53LNB_S_BYPASS_IL
     _gain: float = ZX60_53LNB_S_GAIN
     _bypass_1dB_comp: float = ZX60_53LNB_S_BYPASS_1dB_COMP
     _gain_1dB_comp: float = ZX60_53LNB_S_GAIN_1dB_COMP
     bypass_state: bool = False
-
-    @property
-    def type(self) -> str:
-        return self._type
 
     @property
     def bypass_il(self) -> float:
@@ -50,63 +86,31 @@ class Amplifier:
 
 
 @dataclass
-class Filter:
+class Filter(RFComponent):
     _type: str = "BFCV-2895"
     _filter_num: int = 2
     _filter_il: float = BFCV_2895_IL
     _atten: float = -3.0
     _atten_num: int = 1
-
-    @property
-    def type(self) -> str:
-        return self._type
-
-    @property
-    def filter_num(self) -> int:
-        return self._filter_num
-
-    @property
-    def filter_il(self) -> float:
-        return self._filter_il
-
-    @property
-    def atten(self) -> float:
-        return self._atten
-
-    @property
-    def atten_num(self) -> int:
-        return self._atten_num
+    _1dB_comp: float = BFCV_2895_1dB_COMP
 
     @property
     def total_gain_il(self) -> float:
         return self._filter_il * self._filter_num + self._atten * self._atten_num
 
-
-@dataclass
-class Equalizer:
-    _type: str = "VEQY-5-63+"
-    _insert_loss: float = VEQY_5_63_IL
-
     @property
-    def type(self) -> str:
-        return self._type
-
-    @property
-    def total_gain_il(self) -> float:
-        return self._insert_loss
+    def input_1dB_comp(self) -> float:
+        return self._1dB_comp
 
 
 @dataclass
-class VariableAtten:
+class VariableAtten(RFComponent):
     _type: str = "ZX76-31R5A-PNS+"
     _insert_loss: float = ZX76_31R5A_PNS_IL
     _atten_range: float = ZX76_31R5A_PNS_RANGE
     _atten_step: float = ZX76_31R5A_PNS_STEP
     _atten: float = 0.0
-
-    @property
-    def type(self) -> str:
-        return self._type
+    _1dB_comp: float = ZX76_31R5A_PNS_1dB_COMP
 
     @property
     def insert_loss(self) -> float:
@@ -143,19 +147,9 @@ class VariableAtten:
     def total_gain_il(self) -> float:
         return self._insert_loss + self._atten
 
-
-@dataclass
-class FixedAtten:
-    _type: str = "BW-S5W2+"
-    _insert_loss: float = BW_S5W2_IL
-
     @property
-    def type(self) -> str:
-        return self._type
-
-    @property
-    def total_gain_il(self) -> float:
-        return self._insert_loss
+    def input_1dB_comp(self) -> float:
+        return self._1dB_comp
 
 
 class SOUKRFMixerlessAttenAmpLevel(ABC):
@@ -245,13 +239,26 @@ class SOUKRFMixerlessTransmitAttenAmpLevel(SOUKRFMixerlessAttenAmpLevel):
         )
         return (min_il, max_il)
 
+    # order:
+    # variable atten -> filter -> equalizer -> amplifier -> fixed atten
+
     @property
     def input_1dB_comp(self) -> float:
-        return (
+        return min(
+            self.variable_atten.input_1dB_comp,
+            self.filter.input_1dB_comp - self.variable_atten.total_gain_il,
+            self.equalizer.input_1dB_comp
+            - self.variable_atten.total_gain_il
+            - self.filter.total_gain_il,
             self.amp.input_1dB_comp
-            - self.filter.total_gain_il
             - self.equalizer.total_gain_il
-            - self.variable_atten.insert_loss
+            - self.filter.total_gain_il
+            - self.variable_atten.total_gain_il,
+            self.fixed_atten.input_1dB_comp
+            - self.amp.total_gain_il
+            - self.equalizer.total_gain_il
+            - self.filter.total_gain_il
+            - self.variable_atten.total_gain_il,
         )
 
 
@@ -316,7 +323,7 @@ class SOUKRFMixerlessRecvAttenAmpLevel(SOUKRFMixerlessAttenAmpLevel):
         return min(
             self.amp.input_1dB_comp
             - self.fixed_atten.total_gain_il
-            - self.variable_atten.insert_loss
+            - self.variable_atten.total_gain_il
             - self.preamp.total_gain_il
             - self.filter.total_gain_il
             - self.equalizer.total_gain_il,
@@ -324,3 +331,411 @@ class SOUKRFMixerlessRecvAttenAmpLevel(SOUKRFMixerlessAttenAmpLevel):
             - self.equalizer.total_gain_il
             - self.filter.total_gain_il,
         )
+
+
+@dataclass
+class mimicAttenAmp:
+    dev_name: Literal["recv_atten", "transmit_atten"]
+
+
+@dataclass
+class mimicSOUKRFMixerlessModuleChnAttenAmp:
+    chn_idx: int
+    atten_amp: mimicAttenAmp = field(init=False)
+    atten_amp_level: SOUKRFMixerlessAttenAmpLevel = field(init=False)
+
+    @property
+    def atten_value_dB(self) -> float:
+        return -self.atten_amp_level.atten
+
+    @atten_value_dB.setter
+    def atten_value_dB(self, value: float) -> None:
+        self.atten_amp_level.atten = -value
+
+    @property
+    def amp_bypass(self) -> bool:
+        return self.atten_amp_level.bypass_state
+
+    @amp_bypass.setter
+    def amp_bypass(self, value: bool) -> None:
+        self.atten_amp_level.bypass_state = value
+
+
+class mimicSOUKRFMixerlessModule:
+    def __init__(self):
+        self._atten_amp_channels: List[mimicSOUKRFMixerlessModuleChnAttenAmp] = []
+        for chn_idx in range(2):  # Assuming 2 channels for the mimic module
+            atten_amp_channel = mimicSOUKRFMixerlessModuleChnAttenAmp(chn_idx=chn_idx)
+            atten_amp_channel.atten_amp = mimicAttenAmp(dev_name="recv_atten")
+            atten_amp_channel.atten_amp_level = (
+                SOUKRFMixerlessRecvAttenAmpLevel()
+            )  # initialize attenuator level object
+            self._atten_amp_channels.append(atten_amp_channel)
+
+            atten_amp_channel = mimicSOUKRFMixerlessModuleChnAttenAmp(chn_idx=chn_idx)
+            atten_amp_channel.atten_amp = mimicAttenAmp(dev_name="transmit_atten")
+            atten_amp_channel.atten_amp_level = (
+                SOUKRFMixerlessTransmitAttenAmpLevel()
+            )  # initialize attenuator level object
+            self._atten_amp_channels.append(atten_amp_channel)
+
+    def _get_atten_amp(
+        self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
+    ) -> mimicSOUKRFMixerlessModuleChnAttenAmp:
+        target_atten_amp = None
+        for atten_amp_channel in self._atten_amp_channels:
+            if (
+                atten_amp_channel.chn_idx == chn_idx
+                and atten_amp_channel.atten_amp.dev_name == dev_name
+            ):
+                target_atten_amp = atten_amp_channel
+                break
+        if target_atten_amp is None:
+            raise ValueError(
+                f"Attenuator with dev_name {dev_name} on channel {chn_idx} not found."
+            )
+        return target_atten_amp
+
+    def set_attenuation(
+        self,
+        chn_idx: int,
+        dev_name: Literal["recv_atten", "transmit_atten"],
+        attenuation_dB: float,
+    ) -> None:
+        target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
+        target_atten_amp.atten_value_dB = attenuation_dB
+
+    def get_attenuation_value(
+        self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
+    ) -> float:
+        target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
+        return target_atten_amp.atten_value_dB
+
+    def set_amp_bypass_state(
+        self,
+        chn_idx: int,
+        dev_name: Literal["recv_atten", "transmit_atten"],
+        bypass: bool,
+    ) -> None:
+        target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
+        target_atten_amp.amp_bypass = bypass
+
+    def get_amp_bypass_state(
+        self, chn_idx: int, dev_name: Literal["recv_atten", "transmit_atten"]
+    ) -> bool:
+        target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
+        return target_atten_amp.amp_bypass
+
+    def get_transfer(
+        self, chn_idx: int, total_input_power: float = None, num_tones: int = None
+    ) -> None:
+        current_atten_value = self.get_attenuation_value(
+            chn_idx=chn_idx, dev_name="transmit_atten"
+        )
+        current_bypass_state = self.get_amp_bypass_state(
+            chn_idx=chn_idx, dev_name="transmit_atten"
+        )
+        transmit_atten_amp = self._get_atten_amp(chn_idx, "transmit_atten")
+        transmit_atten_setting_range = np.arange(
+            0,
+            transmit_atten_amp.atten_amp_level.variable_atten.atten_range,
+            transmit_atten_amp.atten_amp_level.variable_atten.atten_step,
+        )
+        transmit_atten_amp.amp_bypass = True
+        transmit_bypass_tranfer_range = []
+        transmit_bypass_input_1dB_comp = []
+        for atten_setting in transmit_atten_setting_range:
+            transmit_atten_amp.atten_value_dB = -atten_setting
+            transmit_bypass_tranfer_range.append(
+                transmit_atten_amp.atten_amp_level.total_gain_il
+            )
+            transmit_bypass_input_1dB_comp.append(
+                transmit_atten_amp.atten_amp_level.input_1dB_comp
+            )
+        transmit_atten_amp.amp_bypass = False
+        transmit_amp_enable_tranfer_range = []
+        transmit_amp_enable_input_1dB_comp = []
+        for atten_setting in transmit_atten_setting_range:
+            transmit_atten_amp.atten_value_dB = -atten_setting
+            transmit_amp_enable_tranfer_range.append(
+                transmit_atten_amp.atten_amp_level.total_gain_il
+            )
+            transmit_amp_enable_input_1dB_comp.append(
+                transmit_atten_amp.atten_amp_level.input_1dB_comp
+            )
+
+        transmit_atten_amp.atten_value_dB = current_atten_value
+        transmit_atten_amp.amp_bypass = current_bypass_state
+
+        current_atten_value = self.get_attenuation_value(
+            chn_idx=chn_idx, dev_name="recv_atten"
+        )
+        current_bypass_state = self.get_amp_bypass_state(
+            chn_idx=chn_idx, dev_name="recv_atten"
+        )
+        recv_atten_amp = self._get_atten_amp(chn_idx, "recv_atten")
+        recv_atten_setting_range = np.arange(
+            0,
+            recv_atten_amp.atten_amp_level.variable_atten.atten_range,
+            recv_atten_amp.atten_amp_level.variable_atten.atten_step,
+        )
+        recv_atten_amp.amp_bypass = True
+        recv_bypass_tranfer_range = []
+        recv_bypass_input_1dB_comp = []
+        for atten_setting in recv_atten_setting_range:
+            recv_atten_amp.atten_value_dB = -atten_setting
+            recv_bypass_tranfer_range.append(
+                recv_atten_amp.atten_amp_level.total_gain_il
+            )
+            recv_bypass_input_1dB_comp.append(
+                recv_atten_amp.atten_amp_level.input_1dB_comp
+            )
+        recv_atten_amp.amp_bypass = False
+        recv_amp_enable_tranfer_range = []
+        recv_amp_enable_input_1dB_comp = []
+        for atten_setting in recv_atten_setting_range:
+            recv_atten_amp.atten_value_dB = -atten_setting
+            recv_amp_enable_tranfer_range.append(
+                recv_atten_amp.atten_amp_level.total_gain_il
+            )
+            recv_amp_enable_input_1dB_comp.append(
+                recv_atten_amp.atten_amp_level.input_1dB_comp
+            )
+
+        recv_atten_amp.atten_value_dB = current_atten_value
+        recv_atten_amp.amp_bypass = current_bypass_state
+
+        plt.figure()
+        plt.suptitle(f"Power budget analysis for Channel {chn_idx}")
+        if total_input_power is not None and num_tones is not None:
+            per_tone_input_power = total_input_power - 10 * np.log10(num_tones)
+
+            def transmit_x_forward(x):
+                return x + per_tone_input_power + transmit_atten_amp.atten_value_dB
+
+            def transmit_x_inverse(x):
+                return x - per_tone_input_power + transmit_atten_amp.atten_value_dB
+
+            def transmit_y_forward(y):
+                return y + per_tone_input_power
+
+            def transmit_y_inverse(y):
+                return y - per_tone_input_power
+
+            def recv_x_forward(x):
+                return (
+                    x
+                    + per_tone_input_power
+                    + transmit_atten_amp.atten_amp_level.total_gain_il
+                    + recv_atten_amp.atten_value_dB
+                )
+
+            def recv_x_inverse(x):
+                return (
+                    x
+                    - per_tone_input_power
+                    - transmit_atten_amp.atten_amp_level.total_gain_il
+                    + recv_atten_amp.atten_value_dB
+                )
+
+            def recv_y_forward(y):
+                return (
+                    y
+                    + 10 * np.log10(num_tones)
+                    + per_tone_input_power
+                    + transmit_atten_amp.atten_amp_level.total_gain_il
+                )
+
+            def recv_y_inverse(y):
+                return (
+                    y
+                    - 10 * np.log10(num_tones)
+                    - per_tone_input_power
+                    - transmit_atten_amp.atten_amp_level.total_gain_il
+                )
+
+            plt.subplot(1, 4, 1)
+            plt.plot(
+                transmit_atten_setting_range,
+                transmit_bypass_input_1dB_comp,
+                label="Input 1dB Compression with Amplifier Bypassed",
+                marker="o",
+                markersize=3,
+                linestyle="--",
+            )
+            plt.plot(
+                transmit_atten_setting_range,
+                transmit_amp_enable_input_1dB_comp,
+                label="Input 1dB Compression with Amplifier Enabled",
+                marker="x",
+                markersize=6,
+                linestyle="--",
+            )
+            plt.axhline(
+                total_input_power,
+                color="red",
+                linestyle="--",
+                label=f"Total Input Power ({total_input_power:.2f} dBm)",
+            )
+            plt.title("Transmit Setting vs 1dB Compression")
+            plt.xlabel("Attenuation Setting (dB)")
+            plt.ylabel("Input 1dB Compression (dBm)")
+            plt.legend()
+            plt.grid(True)
+            plt.subplot(1, 4, 2)
+        else:
+            plt.subplot(1, 2, 1)
+        plt.plot(
+            transmit_atten_setting_range,
+            transmit_bypass_tranfer_range,
+            label="Transmit Attenuation with Amplifier Bypassed",
+            marker="o",
+            markersize=3,
+        )
+        plt.plot(
+            transmit_atten_setting_range,
+            transmit_amp_enable_tranfer_range,
+            label="Transmit Attenuation with Amplifier Enabled",
+            marker="x",
+            markersize=6,
+        )
+        plt.scatter(
+            -transmit_atten_amp.atten_value_dB,
+            transmit_atten_amp.atten_amp_level.total_gain_il,
+            color="red",
+            marker="o",
+            s=64,
+            label="Current Setting",
+        )
+        if total_input_power is not None and num_tones is not None:
+            secax_x = plt.gca().secondary_xaxis(
+                "top", functions=(transmit_x_forward, transmit_x_inverse)
+            )
+            secax_x.set_xlabel("Per-Tone Input Power (dBm)")
+
+            secax_y = plt.gca().secondary_yaxis(
+                "right", functions=(transmit_y_forward, transmit_y_inverse)
+            )
+            secax_y.set_ylabel("Tone Power towards Cryo (dBm)")
+
+            plt.axvline(
+                -transmit_atten_amp.atten_value_dB,
+                color="grey",
+                linestyle="--",
+                label=f"Per-Tone Input Power ({per_tone_input_power:.2f} dBm)",
+            )
+            plt.axhline(
+                transmit_atten_amp.atten_amp_level.total_gain_il,
+                color="grey",
+                linestyle="--",
+                label=f"Tone Power towards Cryo ({per_tone_input_power + transmit_atten_amp.atten_amp_level.total_gain_il:.2f} dBm)",
+            )
+        plt.title("Transmit Setting vs Total Gain IL and Power Level")
+        plt.xlabel("Attenuation Setting (dB)")
+        plt.ylabel("Total Gain IL (dB)")
+        plt.legend()
+        plt.grid(True)
+        if total_input_power is not None and num_tones is not None:
+            plt.subplot(1, 4, 3)
+        else:
+            plt.subplot(1, 2, 2)
+        plt.plot(
+            recv_atten_setting_range,
+            recv_bypass_tranfer_range,
+            label="Receive Attenuation with Amplifier Bypassed",
+            marker="o",
+            markersize=3,
+        )
+        plt.plot(
+            recv_atten_setting_range,
+            recv_amp_enable_tranfer_range,
+            label="Receive Attenuation with Amplifier Enabled",
+            marker="x",
+            markersize=6,
+        )
+        plt.scatter(
+            -recv_atten_amp.atten_value_dB,
+            recv_atten_amp.atten_amp_level.total_gain_il,
+            color="red",
+            marker="o",
+            s=64,
+            label="Current Setting",
+        )
+        if total_input_power is not None and num_tones is not None:
+            secax_x = plt.gca().secondary_xaxis(
+                "top", functions=(recv_x_forward, recv_x_inverse)
+            )
+            secax_x.set_xlabel(
+                f"Tone Power from Cryo ({per_tone_input_power + transmit_atten_amp.atten_amp_level.total_gain_il:.2f} dBm)"
+            )
+
+            secax_y = plt.gca().secondary_yaxis(
+                "right", functions=(recv_y_forward, recv_y_inverse)
+            )
+            secax_y.set_ylabel("Total Power towards RFSoC(dBm)")
+
+            plt.axvline(
+                -recv_atten_amp.atten_value_dB,
+                color="grey",
+                linestyle="--",
+                label=f"Tone Power from Cryo ({per_tone_input_power + transmit_atten_amp.atten_amp_level.total_gain_il:.2f} dBm)",
+            )
+            plt.axhline(
+                recv_atten_amp.atten_amp_level.total_gain_il,
+                color="grey",
+                linestyle="--",
+                label=f"Total Power towards RFSoC ({total_input_power + transmit_atten_amp.atten_amp_level.total_gain_il + recv_atten_amp.atten_amp_level.total_gain_il:.2f} dBm)",
+            )
+        plt.title("Receive Setting vs Total Gain IL and Power Level")
+        plt.xlabel("Attenuation Setting (dB)")
+        plt.ylabel("Total Gain IL (dB)")
+        plt.legend()
+        plt.grid(True)
+
+        if total_input_power is not None and num_tones is not None:
+            plt.subplot(1, 4, 4)
+            plt.plot(
+                recv_atten_setting_range,
+                recv_bypass_input_1dB_comp,
+                label="Input 1dB Compression with Amplifier Bypassed",
+                marker="o",
+                markersize=3,
+                linestyle="--",
+            )
+            plt.plot(
+                recv_atten_setting_range,
+                recv_amp_enable_input_1dB_comp,
+                label="Input 1dB Compression with Amplifier Enabled",
+                marker="x",
+                markersize=6,
+                linestyle="--",
+            )
+            plt.axhline(
+                total_input_power + transmit_atten_amp.atten_amp_level.total_gain_il,
+                color="red",
+                linestyle="--",
+                label=f"Total Power from Cryo ({total_input_power + transmit_atten_amp.atten_amp_level.total_gain_il:.2f} dBm)",
+            )
+            plt.title("Receive Setting vs 1dB Compression")
+            plt.xlabel("Attenuation Setting (dB)")
+            plt.ylabel("Input 1dB Compression (dBm)")
+            plt.legend()
+            plt.grid(True)
+
+        plt.subplots_adjust(wspace=0.35)
+        plt.show()
+
+
+def main():
+    mimic_module = mimicSOUKRFMixerlessModule()
+    mimic_module.set_attenuation(
+        chn_idx=0, dev_name="transmit_atten", attenuation_dB=10
+    )
+    mimic_module.set_amp_bypass_state(chn_idx=0, dev_name="transmit_atten", bypass=True)
+    mimic_module.set_attenuation(chn_idx=0, dev_name="recv_atten", attenuation_dB=0)
+    mimic_module.set_amp_bypass_state(chn_idx=0, dev_name="recv_atten", bypass=True)
+    mimic_module.get_transfer(chn_idx=0, total_input_power=5, num_tones=800)
+
+
+if __name__ == "__main__":
+    main()
