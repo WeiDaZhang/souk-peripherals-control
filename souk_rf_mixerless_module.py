@@ -1,7 +1,10 @@
 import logging
-from typing import Literal, List
+import os
+from typing import Literal, List, Tuple
 from dataclasses import dataclass, field
 
+import matplotlib.pyplot as plt
+import numpy as np
 from smbus2 import SMBus
 
 from max732_8_9 import MAX732_8_9
@@ -9,6 +12,8 @@ from souk_rf_mixerless_atten_amp_level import (
     SOUKRFMixerlessAttenAmpLevel,
     SOUKRFMixerlessRecvAttenAmpLevel,
     SOUKRFMixerlessTransmitAttenAmpLevel,
+    SOUKRFMixerlessAttenAmpTransfer,
+    SampleCryo,
 )
 
 ATTEN_CONN_MAP = {
@@ -285,6 +290,354 @@ class SOUKRFMixerlessModule:
         target_atten_amp = self._get_atten_amp(chn_idx, dev_name)
         return self._get_amp_bypass(target_atten_amp)
 
+    def get_transfer(
+        self, chn_idx: int
+    ) -> Tuple[SOUKRFMixerlessAttenAmpTransfer, SOUKRFMixerlessAttenAmpTransfer]:
+        transmit_atten_amp_level: SOUKRFMixerlessTransmitAttenAmpLevel = (
+            self._get_atten_amp(chn_idx, "transmit_atten").atten_amp_level
+        )
+        transmit_transfer = transmit_atten_amp_level.get_transfer()
+
+        recv_atten_amp_level: SOUKRFMixerlessRecvAttenAmpLevel = self._get_atten_amp(
+            chn_idx, "recv_atten"
+        ).atten_amp_level
+        recv_transfer = recv_atten_amp_level.get_transfer()
+        return transmit_transfer, recv_transfer
+
+    def plot_transfer(
+        self,
+        chn_idx: int,
+        total_input_power: float = None,
+        num_tones: int = None,
+        cryo_sample_component: SampleCryo = None,
+        image_path_name: str = None,
+    ) -> None:
+        transmit_transfer, recv_transfer = self.get_transfer(chn_idx)
+
+        # Determine figure size based on number of subplots
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            plt.figure(figsize=(32, 8))
+        else:
+            plt.figure(figsize=(12, 8))
+
+        plt.suptitle(f"Power budget analysis for Channel {chn_idx}")
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            per_tone_input_power = total_input_power - 10 * np.log10(num_tones)
+
+            def transmit_x_forward(x):
+                return x + per_tone_input_power - transmit_transfer.atten_value_dB
+
+            def transmit_x_inverse(x):
+                return x - per_tone_input_power - transmit_transfer.atten_value_dB
+
+            def transmit_y_forward(y):
+                return y + per_tone_input_power
+
+            def transmit_y_inverse(y):
+                return y - per_tone_input_power
+
+            def cryo_y_forward(y):
+                return (
+                    y
+                    + cryo_sample_component.total_gain_il
+                    - cryo_sample_component.sample_il
+                )
+
+            def cryo_y_inverse(y):
+                return (
+                    y
+                    - cryo_sample_component.total_gain_il
+                    + cryo_sample_component.sample_il
+                )
+
+            def recv_x_forward(x):
+                return (
+                    x
+                    + per_tone_input_power
+                    + transmit_transfer.total_gain_il
+                    + cryo_sample_component.total_gain_il
+                    - recv_transfer.atten_value_dB
+                )
+
+            def recv_x_inverse(x):
+                return (
+                    x
+                    - per_tone_input_power
+                    - transmit_transfer.total_gain_il
+                    - cryo_sample_component.total_gain_il
+                    - recv_transfer.atten_value_dB
+                )
+
+            def recv_y_forward(y):
+                return (
+                    y
+                    + 10 * np.log10(num_tones)
+                    + per_tone_input_power
+                    + transmit_transfer.total_gain_il
+                    + cryo_sample_component.total_gain_il
+                )
+
+            def recv_y_inverse(y):
+                return (
+                    y
+                    - 10 * np.log10(num_tones)
+                    - per_tone_input_power
+                    - transmit_transfer.total_gain_il
+                    - cryo_sample_component.total_gain_il
+                )
+
+            plt.subplot(1, 5, 1)
+            plt.plot(
+                transmit_transfer.atten_setting_range,
+                transmit_transfer.bypass_input_1dB_comp,
+                label="Input 1dB Compression with Amplifier Bypassed",
+                marker="o",
+                markersize=3,
+                linestyle="--",
+            )
+            plt.plot(
+                transmit_transfer.atten_setting_range,
+                transmit_transfer.amp_enable_input_1dB_comp,
+                label="Input 1dB Compression with Amplifier Enabled",
+                marker="x",
+                markersize=6,
+                linestyle="--",
+            )
+            plt.axhline(
+                total_input_power,
+                color="red",
+                linestyle="--",
+                label=f"Total Input Power ({total_input_power:.2f} dBm)",
+            )
+            plt.title("Transmit Setting vs 1dB Compression")
+            plt.xlabel("Attenuation Setting (dB)")
+            plt.ylabel("Input 1dB Compression (dBm)")
+            plt.legend()
+            plt.grid(True)
+            plt.subplot(1, 5, 2)
+        else:
+            plt.subplot(1, 2, 1)
+        plt.plot(
+            transmit_transfer.atten_setting_range,
+            transmit_transfer.bypass_tranfer_range,
+            label="Transmit Attenuation with Amplifier Bypassed",
+            marker="o",
+            markersize=3,
+        )
+        plt.plot(
+            transmit_transfer.atten_setting_range,
+            transmit_transfer.amp_enable_tranfer_range,
+            label="Transmit Attenuation with Amplifier Enabled",
+            marker="x",
+            markersize=6,
+        )
+        plt.scatter(
+            transmit_transfer.atten_value_dB,
+            transmit_transfer.total_gain_il,
+            color="red",
+            marker="o",
+            s=64,
+            label="Current Setting",
+        )
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            secax_x = plt.gca().secondary_xaxis(
+                "top", functions=(transmit_x_forward, transmit_x_inverse)
+            )
+            secax_x.set_xlabel("Per-Tone Input Power (dBm)")
+
+            secax_y = plt.gca().secondary_yaxis(
+                "right", functions=(transmit_y_forward, transmit_y_inverse)
+            )
+            secax_y.set_ylabel("Tone Power towards Cryo (dBm)")
+
+            plt.axvline(
+                transmit_transfer.atten_value_dB,
+                color="grey",
+                linestyle="--",
+                label=f"Per-Tone Input Power ({per_tone_input_power:.2f} dBm)",
+            )
+            plt.axhline(
+                transmit_transfer.total_gain_il,
+                color="grey",
+                linestyle="--",
+                label=f"Tone Power towards Cryo ({per_tone_input_power + transmit_transfer.total_gain_il:.2f} dBm)",
+            )
+        plt.title("Transmit Setting vs Total Gain IL and Power Level")
+        plt.xlabel("Attenuation Setting (dB)")
+        plt.ylabel("Total Gain IL (dB)")
+        plt.legend()
+        plt.grid(True)
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            plt.subplot(1, 5, 3)
+            plt.plot(
+                per_tone_input_power
+                + transmit_transfer.total_gain_il
+                + cryo_sample_component.sample_il,
+                marker="o",
+                markersize=6,
+                linestyle="None",
+                color="orange",
+                label=f"Tone Power at Cryo Sample ({per_tone_input_power + transmit_transfer.total_gain_il + cryo_sample_component.sample_il:.2f} dBm)",
+            )
+            plt.plot(
+                total_input_power
+                + transmit_transfer.total_gain_il
+                + cryo_sample_component.sample_il,
+                marker="o",
+                markersize=6,
+                linestyle="None",
+                color="blue",
+                label=f"Total Power at Cryo Sample ({total_input_power + transmit_transfer.total_gain_il + cryo_sample_component.sample_il:.2f} dBm)",
+            )
+            plt.axhline(
+                cryo_y_inverse(
+                    cryo_sample_component.input_1dB_comp
+                    + cryo_sample_component.total_gain_il
+                ),
+                color="red",
+                linestyle="--",
+                label=f"Cryo Output Total Power 1dB Compression ({cryo_sample_component.input_1dB_comp + cryo_sample_component.total_gain_il:.2f} dBm)",
+            )
+            secax_y = plt.gca().secondary_yaxis(
+                "right", functions=(cryo_y_forward, cryo_y_inverse)
+            )
+            secax_y.set_ylabel("Cryo Output Power (dBm)")
+            plt.xticks([])
+            plt.legend()
+            plt.title("Estimated Tone Power at Cryo Sample")
+            plt.ylabel("Sample Input Power (dBm)")
+            plt.grid(True)
+            plt.subplot(1, 5, 4)
+        else:
+            plt.subplot(1, 2, 2)
+        plt.plot(
+            recv_transfer.atten_setting_range,
+            recv_transfer.bypass_tranfer_range,
+            label="Receive Attenuation with Amplifier Bypassed",
+            marker="o",
+            markersize=3,
+        )
+        plt.plot(
+            recv_transfer.atten_setting_range,
+            recv_transfer.amp_enable_tranfer_range,
+            label="Receive Attenuation with Amplifier Enabled",
+            marker="x",
+            markersize=6,
+        )
+        plt.scatter(
+            recv_transfer.atten_value_dB,
+            recv_transfer.total_gain_il,
+            color="red",
+            marker="o",
+            s=64,
+            label="Current Setting",
+        )
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            secax_x = plt.gca().secondary_xaxis(
+                "top", functions=(recv_x_forward, recv_x_inverse)
+            )
+            secax_x.set_xlabel(
+                f"Tone Power from Cryo ({per_tone_input_power + transmit_transfer.total_gain_il + cryo_sample_component.total_gain_il:.2f} dBm)"
+            )
+
+            secax_y = plt.gca().secondary_yaxis(
+                "right", functions=(recv_y_forward, recv_y_inverse)
+            )
+            secax_y.set_ylabel("Total Power towards RFSoC(dBm)")
+
+            plt.axvline(
+                recv_transfer.atten_value_dB,
+                color="grey",
+                linestyle="--",
+                label=f"Tone Power from Cryo ({per_tone_input_power + transmit_transfer.total_gain_il + cryo_sample_component.total_gain_il:.2f} dBm)",
+            )
+            plt.axhline(
+                recv_transfer.total_gain_il,
+                color="grey",
+                linestyle="--",
+                label=f"Total Power towards RFSoC ({total_input_power + transmit_transfer.total_gain_il + cryo_sample_component.total_gain_il + recv_transfer.total_gain_il:.2f} dBm)",
+            )
+        plt.title("Receive Setting vs Total Gain IL and Power Level")
+        plt.xlabel("Attenuation Setting (dB)")
+        plt.ylabel("Total Gain IL (dB)")
+        plt.legend()
+        plt.grid(True)
+
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            plt.subplot(1, 5, 5)
+            plt.plot(
+                recv_transfer.atten_setting_range,
+                recv_transfer.bypass_input_1dB_comp,
+                label="Input 1dB Compression with Amplifier Bypassed",
+                marker="o",
+                markersize=3,
+                linestyle="--",
+            )
+            plt.plot(
+                recv_transfer.atten_setting_range,
+                recv_transfer.amp_enable_input_1dB_comp,
+                label="Input 1dB Compression with Amplifier Enabled",
+                marker="x",
+                markersize=6,
+                linestyle="--",
+            )
+            plt.axhline(
+                total_input_power
+                + transmit_transfer.total_gain_il
+                + cryo_sample_component.total_gain_il,
+                color="red",
+                linestyle="--",
+                label=f"Total Power from Cryo ({total_input_power + transmit_transfer.total_gain_il + cryo_sample_component.total_gain_il:.2f} dBm)",
+            )
+            plt.title("Receive Setting vs 1dB Compression")
+            plt.xlabel("Attenuation Setting (dB)")
+            plt.ylabel("Input 1dB Compression (dBm)")
+            plt.legend()
+            plt.grid(True)
+
+        plt.subplots_adjust(wspace=0.35)
+
+        if image_path_name is not None:
+            if not image_path_name.endswith(".png"):
+                image_path_name += ".png"
+            if not os.path.exists(image_path_name):
+                os.makedirs(os.path.dirname(image_path_name), exist_ok=True)
+            plt.savefig(image_path_name, dpi=300, bbox_inches="tight")
+        else:
+            # Create .logdata directory if it doesn't exist
+            os.makedirs(".logdata", exist_ok=True)
+
+            plt.savefig(
+                f".logdata/power_budget_channel_{chn_idx}.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+        plt.close()
+
 
 def main():
     import argparse
@@ -317,6 +670,18 @@ def main():
         "--get",
         action="store_true",
         help="Get the current attenuation value and amplifier bypass state of all channels and paths.",
+    )
+    parser.add_argument(
+        "--inpwr",
+        type=float,
+        default=-10.0,
+        help="Total input power in dBm.",
+    )
+    parser.add_argument(
+        "--ntones",
+        type=int,
+        default=16,
+        help="Number of tones for power budget analysis.",
     )
     args = parser.parse_args()
 
@@ -371,6 +736,13 @@ def main():
             current_bypass = rfmixerless_module.get_amp_bypass_state(chn_idx, dev_name)
             bypass_str = "bypassed" if current_bypass else "enabled"
             print(f"Channel {chn_idx} {dev_name} amplifier is {bypass_str}.")
+
+    rfmixerless_module.plot_transfer(
+        chn_idx=0,
+        total_input_power=args.inpwr,
+        num_tones=args.ntones,
+        cryo_sample_component=SampleCryo(),
+    )
 
 
 if __name__ == "__main__":
