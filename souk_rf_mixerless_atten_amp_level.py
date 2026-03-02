@@ -21,6 +21,15 @@ ZX76_31R5A_PNS_STEP = -0.5
 ZX76_31R5A_PNS_1dB_COMP = 24.0  # 0.2dB compression point
 BW_S5W2_IL = -5.0
 BW_S5W2_1dB_COMP = 33.0  # max input power
+CYRO_INPUT_CABLE_IL = (
+    -7.0
+)  # estimated insertion loss of the cable from room temp to cryo
+CYRO_OUTPUT_CABLE_IL = (
+    -7.0
+)  # estimated insertion loss of the cable from cryo to room temp
+CYRO_COLD_ATTEN = -20.0  # estimated attenuation from the cold attenuator in the cryo
+CRYO_LNA_GAIN = 25.0  # estimated gain of the cryo LNA
+CRYO_LNA_1dB_COMP = -50.0  # estimated 1dB compression point of the cryo LNA
 
 
 @dataclass
@@ -102,6 +111,30 @@ class Filter(RFComponent):
     @property
     def input_1dB_comp(self) -> float:
         return self._1dB_comp
+
+
+@dataclass
+class SampleCryo(RFComponent):
+    _type: str = "SampleCryo"
+    _in_cable_il: float = CYRO_INPUT_CABLE_IL
+    _cold_atten: float = CYRO_COLD_ATTEN
+    _out_cable_il: float = CYRO_OUTPUT_CABLE_IL
+    _lna_gain: float = CRYO_LNA_GAIN
+    _lna_1dB_comp: float = CRYO_LNA_1dB_COMP
+
+    @property
+    def sample_il(self) -> float:
+        return self._in_cable_il + self._cold_atten
+
+    @property
+    def total_gain_il(self) -> float:
+        return (
+            self._in_cable_il + self._cold_atten + self._out_cable_il + self._lna_gain
+        )
+
+    @property
+    def input_1dB_comp(self) -> float:
+        return self._lna_1dB_comp - self._in_cable_il - self._cold_atten
 
 
 @dataclass
@@ -497,18 +530,27 @@ class mimicSOUKRFMixerlessModule:
         chn_idx: int,
         total_input_power: float = None,
         num_tones: int = None,
+        cryo_sample_component: SampleCryo = None,
         image_path_name: str = None,
     ) -> None:
         transmit_transfer, recv_transfer = self.get_transfer(chn_idx)
 
         # Determine figure size based on number of subplots
-        if total_input_power is not None and num_tones is not None:
-            plt.figure(figsize=(25, 8))
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            plt.figure(figsize=(32, 8))
         else:
             plt.figure(figsize=(12, 8))
 
         plt.suptitle(f"Power budget analysis for Channel {chn_idx}")
-        if total_input_power is not None and num_tones is not None:
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
             per_tone_input_power = total_input_power - 10 * np.log10(num_tones)
 
             def transmit_x_forward(x):
@@ -523,11 +565,26 @@ class mimicSOUKRFMixerlessModule:
             def transmit_y_inverse(y):
                 return y - per_tone_input_power
 
+            def cryo_y_forward(y):
+                return (
+                    y
+                    + cryo_sample_component.total_gain_il
+                    - cryo_sample_component.sample_il
+                )
+
+            def cryo_y_inverse(y):
+                return (
+                    y
+                    - cryo_sample_component.total_gain_il
+                    + cryo_sample_component.sample_il
+                )
+
             def recv_x_forward(x):
                 return (
                     x
                     + per_tone_input_power
                     + transmit_transfer.total_gain_il
+                    + cryo_sample_component.total_gain_il
                     - recv_transfer.atten_value_dB
                 )
 
@@ -536,6 +593,7 @@ class mimicSOUKRFMixerlessModule:
                     x
                     - per_tone_input_power
                     - transmit_transfer.total_gain_il
+                    - cryo_sample_component.total_gain_il
                     - recv_transfer.atten_value_dB
                 )
 
@@ -545,6 +603,7 @@ class mimicSOUKRFMixerlessModule:
                     + 10 * np.log10(num_tones)
                     + per_tone_input_power
                     + transmit_transfer.total_gain_il
+                    + cryo_sample_component.total_gain_il
                 )
 
             def recv_y_inverse(y):
@@ -553,9 +612,10 @@ class mimicSOUKRFMixerlessModule:
                     - 10 * np.log10(num_tones)
                     - per_tone_input_power
                     - transmit_transfer.total_gain_il
+                    - cryo_sample_component.total_gain_il
                 )
 
-            plt.subplot(1, 4, 1)
+            plt.subplot(1, 5, 1)
             plt.plot(
                 transmit_transfer.atten_setting_range,
                 transmit_transfer.bypass_input_1dB_comp,
@@ -583,7 +643,7 @@ class mimicSOUKRFMixerlessModule:
             plt.ylabel("Input 1dB Compression (dBm)")
             plt.legend()
             plt.grid(True)
-            plt.subplot(1, 4, 2)
+            plt.subplot(1, 5, 2)
         else:
             plt.subplot(1, 2, 1)
         plt.plot(
@@ -608,7 +668,11 @@ class mimicSOUKRFMixerlessModule:
             s=64,
             label="Current Setting",
         )
-        if total_input_power is not None and num_tones is not None:
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
             secax_x = plt.gca().secondary_xaxis(
                 "top", functions=(transmit_x_forward, transmit_x_inverse)
             )
@@ -636,8 +700,51 @@ class mimicSOUKRFMixerlessModule:
         plt.ylabel("Total Gain IL (dB)")
         plt.legend()
         plt.grid(True)
-        if total_input_power is not None and num_tones is not None:
-            plt.subplot(1, 4, 3)
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            plt.subplot(1, 5, 3)
+            plt.plot(
+                per_tone_input_power
+                + transmit_transfer.total_gain_il
+                + cryo_sample_component.sample_il,
+                marker="o",
+                markersize=6,
+                linestyle="None",
+                color="orange",
+                label=f"Tone Power at Cryo Sample ({per_tone_input_power + transmit_transfer.total_gain_il + cryo_sample_component.sample_il:.2f} dBm)",
+            )
+            plt.plot(
+                total_input_power
+                + transmit_transfer.total_gain_il
+                + cryo_sample_component.sample_il,
+                marker="o",
+                markersize=6,
+                linestyle="None",
+                color="blue",
+                label=f"Total Power at Cryo Sample ({total_input_power + transmit_transfer.total_gain_il + cryo_sample_component.sample_il:.2f} dBm)",
+            )
+            plt.axhline(
+                cryo_y_inverse(
+                    cryo_sample_component.input_1dB_comp
+                    + cryo_sample_component.total_gain_il
+                ),
+                color="red",
+                linestyle="--",
+                label=f"Cryo Output Total Power 1dB Compression ({cryo_sample_component.input_1dB_comp + cryo_sample_component.total_gain_il:.2f} dBm)",
+            )
+            secax_y = plt.gca().secondary_yaxis(
+                "right", functions=(cryo_y_forward, cryo_y_inverse)
+            )
+            secax_y.set_ylabel("Cryo Output Power (dBm)")
+            plt.xticks([])
+            plt.legend()
+            plt.title("Estimated Tone Power at Cryo Sample")
+            plt.ylabel("Sample Input Power (dBm)")
+            plt.grid(True)
+            plt.subplot(1, 5, 4)
         else:
             plt.subplot(1, 2, 2)
         plt.plot(
@@ -662,12 +769,16 @@ class mimicSOUKRFMixerlessModule:
             s=64,
             label="Current Setting",
         )
-        if total_input_power is not None and num_tones is not None:
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
             secax_x = plt.gca().secondary_xaxis(
                 "top", functions=(recv_x_forward, recv_x_inverse)
             )
             secax_x.set_xlabel(
-                f"Tone Power from Cryo ({per_tone_input_power + transmit_transfer.total_gain_il:.2f} dBm)"
+                f"Tone Power from Cryo ({per_tone_input_power + transmit_transfer.total_gain_il + cryo_sample_component.total_gain_il:.2f} dBm)"
             )
 
             secax_y = plt.gca().secondary_yaxis(
@@ -679,13 +790,13 @@ class mimicSOUKRFMixerlessModule:
                 recv_transfer.atten_value_dB,
                 color="grey",
                 linestyle="--",
-                label=f"Tone Power from Cryo ({per_tone_input_power + transmit_transfer.total_gain_il:.2f} dBm)",
+                label=f"Tone Power from Cryo ({per_tone_input_power + transmit_transfer.total_gain_il + cryo_sample_component.total_gain_il:.2f} dBm)",
             )
             plt.axhline(
                 recv_transfer.total_gain_il,
                 color="grey",
                 linestyle="--",
-                label=f"Total Power towards RFSoC ({total_input_power + transmit_transfer.total_gain_il + recv_transfer.total_gain_il:.2f} dBm)",
+                label=f"Total Power towards RFSoC ({total_input_power + transmit_transfer.total_gain_il + cryo_sample_component.total_gain_il + recv_transfer.total_gain_il:.2f} dBm)",
             )
         plt.title("Receive Setting vs Total Gain IL and Power Level")
         plt.xlabel("Attenuation Setting (dB)")
@@ -693,8 +804,12 @@ class mimicSOUKRFMixerlessModule:
         plt.legend()
         plt.grid(True)
 
-        if total_input_power is not None and num_tones is not None:
-            plt.subplot(1, 4, 4)
+        if (
+            total_input_power is not None
+            and num_tones is not None
+            and cryo_sample_component is not None
+        ):
+            plt.subplot(1, 5, 5)
             plt.plot(
                 recv_transfer.atten_setting_range,
                 recv_transfer.bypass_input_1dB_comp,
@@ -712,10 +827,12 @@ class mimicSOUKRFMixerlessModule:
                 linestyle="--",
             )
             plt.axhline(
-                total_input_power + transmit_transfer.total_gain_il,
+                total_input_power
+                + transmit_transfer.total_gain_il
+                + cryo_sample_component.total_gain_il,
                 color="red",
                 linestyle="--",
-                label=f"Total Power from Cryo ({total_input_power + transmit_transfer.total_gain_il:.2f} dBm)",
+                label=f"Total Power from Cryo ({total_input_power + transmit_transfer.total_gain_il + cryo_sample_component.total_gain_il:.2f} dBm)",
             )
             plt.title("Receive Setting vs 1dB Compression")
             plt.xlabel("Attenuation Setting (dB)")
@@ -755,6 +872,7 @@ def main():
         chn_idx=0,
         total_input_power=5,
         num_tones=800,
+        cryo_sample_component=SampleCryo(),
     )
 
 
