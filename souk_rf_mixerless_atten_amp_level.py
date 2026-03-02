@@ -22,14 +22,14 @@ ZX76_31R5A_PNS_1dB_COMP = 24.0  # 0.2dB compression point
 BW_S5W2_IL = -5.0
 BW_S5W2_1dB_COMP = 33.0  # max input power
 CYRO_INPUT_CABLE_IL = (
-    -7.0
+    -8.5
 )  # estimated insertion loss of the cable from room temp to cryo
 CYRO_OUTPUT_CABLE_IL = (
-    -7.0
+    -8.5
 )  # estimated insertion loss of the cable from cryo to room temp
 CYRO_COLD_ATTEN = -20.0  # estimated attenuation from the cold attenuator in the cryo
-CRYO_LNA_GAIN = 25.0  # estimated gain of the cryo LNA
-CRYO_LNA_1dB_COMP = -50.0  # estimated 1dB compression point of the cryo LNA
+CRYO_LNA_GAIN = 31.0  # estimated gain of the cryo LNA
+CRYO_LNA_1dB_COMP = -29.0  # estimated 1dB compression point of the cryo LNA
 
 
 @dataclass
