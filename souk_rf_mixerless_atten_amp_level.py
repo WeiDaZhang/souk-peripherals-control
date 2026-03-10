@@ -866,12 +866,12 @@ def main():
         chn_idx=0, dev_name="transmit_atten", attenuation_dB=10
     )
     mimic_module.set_amp_bypass_state(chn_idx=0, dev_name="transmit_atten", bypass=True)
-    mimic_module.set_attenuation(chn_idx=0, dev_name="recv_atten", attenuation_dB=0)
-    mimic_module.set_amp_bypass_state(chn_idx=0, dev_name="recv_atten", bypass=True)
+    mimic_module.set_attenuation(chn_idx=0, dev_name="recv_atten", attenuation_dB=3)
+    mimic_module.set_amp_bypass_state(chn_idx=0, dev_name="recv_atten", bypass=False)
     mimic_module.plot_transfer(
         chn_idx=0,
-        total_input_power=5,
-        num_tones=800,
+        total_input_power=-15,
+        num_tones=13,
         cryo_sample_component=SampleCryo(),
     )
 
