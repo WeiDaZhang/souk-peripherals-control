@@ -159,7 +159,13 @@ def group_sequences(
     return results
 
 
-def print_results(results: List[ExtractedDataPoint], start_idx=0, end_idx=-1):
+def print_results(
+    results: List[ExtractedDataPoint],
+    start_idx=0,
+    end_idx=-1,
+    fitted_slope=None,
+    fitted_intercept=None,
+):
     if not results:
         print(
             "No complete sequences found (the four prefixes did not appear in order)."
@@ -196,18 +202,51 @@ def print_results(results: List[ExtractedDataPoint], start_idx=0, end_idx=-1):
         [result.estimated_lna_voltage for result in results[start_idx:end_idx]],
         [result.bias_current * 1000 for result in results[start_idx:end_idx]],
     )
+    if fitted_slope is not None and fitted_intercept is not None:
+        x_vals = [result.estimated_lna_voltage for result in results[start_idx:end_idx]]
+        y_vals = [fitted_slope * x + fitted_intercept for x in x_vals]
+        plt.plot(
+            x_vals,
+            y_vals,
+            color="red",
+            label=f"Fitted line (y = {fitted_slope:.3f}x + {fitted_intercept:.3f})",
+        )
+        plt.legend()
     plt.xlabel("V bias estimated across LNA (V)")
     plt.ylabel("I meas (mA)")
     plt.grid()
     plt.show()
 
 
+def fit_v_bias_vs_i_meas(results: List[ExtractedDataPoint]):
+    """
+    Fit a linear model to the V bias vs I meas data and return the slope and intercept.
+    """
+    import numpy as np
+    from sklearn.linear_model import LinearRegression
+
+    X = np.array([result.estimated_lna_voltage for result in results]).reshape(-1, 1)
+    y = np.array([result.bias_current * 1000 for result in results])  # convert to mA
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    slope = model.coef_[0]  # slope of the line in units of mA/V
+    intercept = model.intercept_  # intercept of the line in units of mA
+
+    return slope, intercept
+
+
 def main():
     log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-20_16-05-08.log")
+    log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-17_16-10-09.log")
     matches, lines = scan_matches(log_path)
     results = group_sequences(matches, lines)
 
-    print_results(results)
+    slope, intercept = fit_v_bias_vs_i_meas(results)
+    print(f"Slope: {slope}, Intercept: {intercept}")
+
+    print_results(results, fitted_slope=slope, fitted_intercept=intercept)
 
 
 if __name__ == "__main__":
