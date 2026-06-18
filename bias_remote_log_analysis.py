@@ -234,19 +234,24 @@ def fit_v_bias_vs_i_meas(results: List[ExtractedDataPoint]):
     slope = model.coef_[0]  # slope of the line in units of mA/V
     intercept = model.intercept_  # intercept of the line in units of mA
 
-    return slope, intercept
+    residual = y - model.predict(X)
+    intercept_bound = (intercept - min(residual), intercept + max(residual))
+
+    return slope, intercept, intercept_bound
 
 
 def main():
     log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-20_16-05-08.log")
     log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-17_16-10-09.log")
+    log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-17_16-08-02.log")
+    # log_path = Path(".logdata/souk_lna_bias_control_monitor_2026-02-17_16-06-39.log")
     matches, lines = scan_matches(log_path)
     results = group_sequences(matches, lines)
 
-    slope, intercept = fit_v_bias_vs_i_meas(results)
-    print(f"Slope: {slope}, Intercept: {intercept}")
-
+    slope, intercept, intercept_bound = fit_v_bias_vs_i_meas(results)
     print_results(results, fitted_slope=slope, fitted_intercept=intercept)
+
+    print(f"Slope: {slope}, Intercept: {intercept}, Intercept Bound: {intercept_bound}")
 
 
 if __name__ == "__main__":

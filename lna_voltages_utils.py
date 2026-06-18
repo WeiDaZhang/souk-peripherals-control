@@ -456,7 +456,168 @@ def v_remote_from_data(v_source_values, r_meas, r_highside, r_lowside):
     return v_bias_values[v_i_values_idx], i_meas_values[v_i_values_idx]
 
 
+def v_remote_from_fitted_coef(
+    v_source_values,
+    r_meas,
+    r_highside,
+    r_lowside,
+    fitted_slope,
+    fitted_intercept,
+    v_bias_step=0.001,
+):
+    """
+    v_source: float, source voltage or list of voltages
+    r_meas: float, measured resistance of the DUT
+    r_highside: float, high-side resistance
+    r_lowside: float, low-side resistance
+    fitted_slope: float, slope of the fitted line from measurement data
+    fitted_intercept: float, intercept of the fitted line from measurement data
+    """
+    if not isinstance(v_source_values, (list, np.ndarray)):
+        v_source_values = [v_source_values]
+    else:
+        v_source_values = v_source_values
+
+    def i_meas_from_fitted(v_bias):
+        return (fitted_slope * v_bias + fitted_intercept) / 1000  # Convert from mA to A
+
+    v_bias_i_meas = []
+    for v_source in v_source_values:
+        v_bias_values = np.linspace(0, v_source, int(v_source / v_bias_step) + 1)
+        v_i_values_idx = np.argmin(
+            abs(
+                v_remote(
+                    v_source,
+                    r_meas,
+                    r_highside,
+                    r_lowside,
+                    i_meas_from_fitted(v_bias_values),
+                )
+                - v_bias_values
+            )
+        )
+
+        v_bias_i_meas.append(
+            (
+                v_bias_values[v_i_values_idx],
+                i_meas_from_fitted(v_bias_values)[v_i_values_idx],
+            )
+        )
+    v_bias_i_meas = np.array(v_bias_i_meas)
+    return v_bias_i_meas[:, 0], v_bias_i_meas[:, 1]
+
+
 def main():
+    # Fixed resistances
+    r_LDO_set = 150000  # Ohms
+    r_RTop = 4700  # Ohms
+    r_RBot = 8200  # Ohms
+    r_highside = 30  # Ohms
+    r_lowside = 0.1  # Ohms
+    r_meas = 10  # 1 kOhm DUT
+    r_paral = 200_000  # Ohms
+    # fitted_slope = 25.114
+    # fitted_intercept = -25.492
+
+    # Potentiometer is the main variable
+    r_pot_values = np.linspace(0, 10000, 128)  # 0 to 10k Ohms
+
+    # R parallel resistance is the secondary variable
+    r_paral_values = np.array([200_000, 1e9])  # np.linspace(10000, 20000, 5)  # Ohms #
+    # R switched resistance is the secondary variable
+    r_switched_values = np.array([18000])  # np.linspace(10000, 20000, 5)  # Ohms #
+    # R fixed resistance is the secondary variable
+    r_fixed_values = np.array([18000])  # np.linspace(10000, 20000, 5)  # Ohms #
+
+    # Fitted coefficients as secondary variable
+    fitted_coef_sets = [
+        {
+            "fitted_slope": 25.11365258983602,
+            "fitted_intercept": -25.155769981576846,
+        },
+        {
+            "fitted_slope": 25.11365258983602,
+            "fitted_intercept": -25.18254179305732,
+        },
+        {
+            "fitted_slope": 25.362331911649207,
+            "fitted_intercept": -25.864177674637084,
+        },
+        {
+            "fitted_slope": 25.362331911649207,
+            "fitted_intercept": -25.72204673601962,
+        },
+        {
+            "fitted_slope": 25.929008973226683,
+            "fitted_intercept": -26.129411642399134,
+        },
+        {
+            "fitted_slope": 25.929008973226683,
+            "fitted_intercept": -26.167940498675218,
+        },
+    ]
+    v_source_open_list = []
+    v_remote_open_from_data_list = []
+    i_meas_open_from_data_list = []
+    for fitted_coef in fitted_coef_sets:
+        # Calculate voltages for each potentiometer value
+        v_source_open = v_source(
+            r_LDO_set, r_RBot, r_RTop, r_paral, False, r_pot_values
+        )
+
+        v_remote_open_from_data, i_meas_open_from_data = v_remote_from_fitted_coef(
+            v_source_open,
+            r_meas,
+            r_highside,
+            r_lowside,
+            fitted_coef["fitted_slope"],
+            fitted_coef["fitted_intercept"],
+        )
+        v_source_open_list.append(v_source_open)
+        v_remote_open_from_data_list.append(v_remote_open_from_data)
+        i_meas_open_from_data_list.append(i_meas_open_from_data)
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+    plt.plot(
+        r_pot_values,
+        np.array(v_source_open_list).T,
+        label="V_source (Switch Open)",
+        # color="orange",
+        marker="o",
+        markersize=2,
+    )
+    plt.plot(
+        r_pot_values,
+        np.array(v_remote_open_from_data_list).T,
+        label=f"V_remote (Switch Open) in range: min {min(v_remote_open_from_data_list[0]):.3f} V, max {max(v_remote_open_from_data_list[-1]):.3f} V",
+        # color="brown",
+        marker="o",
+        markersize=2,
+    )
+    plt.legend()
+    plt.ylabel("Voltage (V)")
+
+    # use twin y-axis to plot i_meas
+    ax2 = plt.gca().twinx()
+    ax2.plot(
+        r_pot_values,
+        np.array(i_meas_open_from_data_list).T * 1000,  # Convert to mA for plotting
+        label="I_meas (Switch Open) From Data (mA)",
+        # color="magenta",
+        marker="x",
+        linestyle="--",
+        markersize=2,
+    )
+    plt.title("Source and Remote Voltages vs Potentiometer Resistance")
+    plt.xlabel("Potentiometer Resistance (Ohms)")
+    plt.ylabel("Current (mA)")
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+
+def _main():
     # Fixed resistances
     r_LDO_set = 150000  # Ohms
     r_switched = 9880  # Ohms
