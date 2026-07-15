@@ -218,7 +218,7 @@ class SOUKLNABiasControlMonitor:
         """
         status: Dict[int, bool] = {}
         for chn in range(1, 15):
-            refdes, oe_dev_name, oe_bit = REFDES_OE_CHN_MAP[chn]
+            oe_dev_name, oe_bit = REFDES_OE_CHN_MAP[chn]
             if oe_dev_name == "U6":
                 status[chn] = self._oe_u6.get_gpio_bit([oe_bit])[0]
             elif oe_dev_name == "U7":
