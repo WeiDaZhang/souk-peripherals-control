@@ -30,19 +30,35 @@ class LNAMonitorHWConfig:
             raise ValueError("i_set_LDO must NOT be changed.")
 
     @classmethod
-    def default_config(cls):
-        return cls(
-            r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig.default_config(),
-            remote_adc_hw_config=LTC2481CDDHWConfig(
-                CA0="low",
-                CA1="float",
-            ),
-            imonitor_adc_hw_config=LTC2481CDDHWConfig.default_config(),
-            switch_status=True,
-            r_RTop1_kOhm=18.0,
-            r_RBot1_kOhm=18.0,
-            r_RAdj1_kOhm=18.0,
-        )
+    def default_config(cls, hw_version: str = "v1") -> "LNAMonitorHWConfig":
+        if hw_version == "v2":
+            return cls(
+                r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig.default_config(),
+                remote_adc_hw_config=LTC2481CDDHWConfig(
+                    CA0="float",
+                    CA1="low",
+                ),
+                imonitor_adc_hw_config=LTC2481CDDHWConfig.default_config(),
+                switch_status=False,  # version 2 has no switch, so set to OFF (open)
+                r_RTop1_kOhm=4.7,
+                r_RBot1_kOhm=8.2,
+                r_RAdj1_kOhm=200.0,
+                r_LDO_set_kOhm=150.0,
+                r_RSENSE_OHMS=100.0,  # TODO: Verify this value for v2 hardware
+            )
+        else:
+            return cls(
+                r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig.default_config(),
+                remote_adc_hw_config=LTC2481CDDHWConfig(
+                    CA0="low",
+                    CA1="float",
+                ),
+                imonitor_adc_hw_config=LTC2481CDDHWConfig.default_config(),
+                switch_status=True,
+                r_RTop1_kOhm=2.7,
+                r_RBot1_kOhm=20.0,
+                r_RAdj1_kOhm=18.0,
+            )
 
 
 class LNAMonitor:
@@ -85,16 +101,16 @@ class LNAMonitor:
     def _local_voltage_to_r_dac_r_aw(self, v_local: float) -> float:
         return reverse_parallel_resistance(
             reverse_parallel_resistance(
-                v_local / self._hw_config.i_set_LDO,
-                self._hw_config.r_LDO_set_kOhm * 1000,
+                v_local / self._hw_config.i_set_LDO,  # total needed set resistance
+                self._hw_config.r_LDO_set_kOhm * 1000,  # Set resistor for LDO on source
             )
             - (
                 self._hw_config.r_RTop1_kOhm * 1000
                 if not self._hw_config.switch_status
                 else 0
-            )
-            - self._hw_config.r_RBot1_kOhm * 1000,
-            self._hw_config.r_RAdj1_kOhm * 1000,
+            )  # switched resistor
+            - self._hw_config.r_RBot1_kOhm * 1000,  # fixed resistor
+            self._hw_config.r_RAdj1_kOhm * 1000,  # parallel to the digital pot
         )
 
     def _r_dac_r_aw_to_local_voltage(self, r_aw: float) -> float:
