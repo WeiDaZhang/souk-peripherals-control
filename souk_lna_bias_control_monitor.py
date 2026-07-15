@@ -670,6 +670,12 @@ def main():
         r11_r13="R13",
         r14_r15="R14",
         r6_r4="R6",
+        r28_r30="R28",
+        r29_r31="R29",
+        r32_r33="R32",
+        r34_r36="R36",
+        r35_r37="R35",
+        r38_r39="R38",
     )
 
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
