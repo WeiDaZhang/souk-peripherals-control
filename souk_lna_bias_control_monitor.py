@@ -676,6 +676,8 @@ def main():
         r34_r36="R36",
         r35_r37="R35",
         r38_r39="R38",
+        u6_dev_type="MAX7329",
+        u7_dev_type="MAX7329",
     )
 
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
