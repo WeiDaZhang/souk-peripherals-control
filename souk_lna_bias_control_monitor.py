@@ -1,7 +1,7 @@
 from typing import List, Literal, Dict, Tuple, Union
 from dataclasses import dataclass
 import logging
-
+import asyncio
 from lna_voltages_utils import v_remote
 from smbus2 import SMBus
 
@@ -9,6 +9,7 @@ from ad511_0_2_4bcpz_5_10_80 import AD511_0_2_4BCPZ_5_10_80HWConfig
 from ltc2481cdd import LTC2481CDDHWConfig
 from lna_monitor import LNAMonitor, LNAMonitorHWConfig
 from tca9548 import TCA9548
+from max732_8_9 import MAX732_8_9
 
 REFDES_LNA_MONITOR_CHN_MAP = {
     "M17": {1: ["root", 0]},
@@ -27,6 +28,23 @@ REFDES_LNA_MONITOR_CHN_MAP = {
     "M30": {14: ["leaf", 6]},
 }
 
+REFDES_OE_CHN_MAP = {
+    1: ["U7", 4],
+    2: ["U6", 7],
+    3: ["U6", 4],
+    4: ["U6", 5],
+    5: ["U6", 3],
+    6: ["U6", 2],
+    7: ["U6", 1],
+    8: ["U6", 0],
+    9: ["U7", 2],
+    10: ["U7", 1],
+    11: ["U7", 0],
+    12: ["U7", 7],
+    13: ["U7", 6],
+    14: ["U7", 5],
+}
+
 SWITCH_ADDR_RESISTOR_MAP = {
     "root": {
         "A0": {"R8": "high", "R10": "low"},
@@ -40,18 +58,41 @@ SWITCH_ADDR_RESISTOR_MAP = {
     },
 }
 
+OE_ADDR_RESISTOR_MAP = {
+    "U6": {
+        "ad0": {"R28": "high", "R30": "low"},
+        "ad1": {"R29": "high", "R31": "low"},
+        "ad2": {"R32": "high", "R33": "low"},
+    },
+    "U7": {
+        "ad0": {"R34": "high", "R36": "low"},
+        "ad1": {"R35": "high", "R37": "low"},
+        "ad2": {"R38": "high", "R39": "low"},
+    },
+}
+
 ROOT_LEAF_CONN = 7
+
+AWAIT_TURN_ON_DELAY = 1  # seconds
 
 
 @dataclass(frozen=True)
 class SOUKLNABiasControlMonitorHWConfig:
     lna_monitor_hw_configs: Dict[str, Union[LNAMonitorHWConfig, None]]
-    r9_r12: Literal["R9", "R12"]  # resistor selection for i2c address
-    r8_r10: Literal["R8", "R10"]  # resistor selection for i2c address
-    r7_r5: Literal["R7", "R5"]  # resistor selection for i2c address
-    r11_r13: Literal["R11", "R13"]  # resistor selection for i2c address
-    r14_r15: Literal["R14", "R15"]  # resistor selection for i2c address
-    r6_r4: Literal["R6", "R4"]  # resistor selection for i2c address
+    r9_r12: Literal["R9", "R12"]  # resistor selection for i2c switch address
+    r8_r10: Literal["R8", "R10"]  # resistor selection for i2c switch address
+    r7_r5: Literal["R7", "R5"]  # resistor selection for i2c switch address
+    r11_r13: Literal["R11", "R13"]  # resistor selection for i2c switch address
+    r14_r15: Literal["R14", "R15"]  # resistor selection for i2c switch address
+    r6_r4: Literal["R6", "R4"]  # resistor selection for i2c switch address
+    r28_r30: Literal["R28", "R30"]  # resistor selection for OE i2c address
+    r29_r31: Literal["R29", "R31"]  # resistor selection for OE i2c address
+    r32_r33: Literal["R32", "R33"]  # resistor selection for OE i2c address
+    r34_r36: Literal["R34", "R36"]  # resistor selection for OE i2c address
+    r35_r37: Literal["R35", "R37"]  # resistor selection for OE i2c address
+    r38_r39: Literal["R38", "R39"]  # resistor selection for OE i2c address
+    u6_dev_type: Literal["MAX7328", "MAX7329"]  # OE device type
+    u7_dev_type: Literal["MAX7328", "MAX7329"]  # OE device type
 
     def __post_init__(self):
         if self.r14_r15 not in SWITCH_ADDR_RESISTOR_MAP["leaf"]["A0"].keys():
@@ -78,6 +119,35 @@ class SOUKLNABiasControlMonitorHWConfig:
             raise ValueError(
                 f"r6_r4 must be one of {SWITCH_ADDR_RESISTOR_MAP['root']['A2'].keys()}"
             )
+
+        if self.r28_r30 not in OE_ADDR_RESISTOR_MAP["U6"]["ad0"].keys():
+            raise ValueError(
+                f"r28_r30 must be one of {OE_ADDR_RESISTOR_MAP['U6']['ad0'].keys()}"
+            )
+        if self.r29_r31 not in OE_ADDR_RESISTOR_MAP["U6"]["ad1"].keys():
+            raise ValueError(
+                f"r29_r31 must be one of {OE_ADDR_RESISTOR_MAP['U6']['ad1'].keys()}"
+            )
+        if self.r32_r33 not in OE_ADDR_RESISTOR_MAP["U6"]["ad2"].keys():
+            raise ValueError(
+                f"r32_r33 must be one of {OE_ADDR_RESISTOR_MAP['U6']['ad2'].keys()}"
+            )
+        if self.r34_r36 not in OE_ADDR_RESISTOR_MAP["U7"]["ad0"].keys():
+            raise ValueError(
+                f"r34_r36 must be one of {OE_ADDR_RESISTOR_MAP['U7']['ad0'].keys()}"
+            )
+        if self.r35_r37 not in OE_ADDR_RESISTOR_MAP["U7"]["ad1"].keys():
+            raise ValueError(
+                f"r35_r37 must be one of {OE_ADDR_RESISTOR_MAP['U7']['ad1'].keys()}"
+            )
+        if self.r38_r39 not in OE_ADDR_RESISTOR_MAP["U7"]["ad2"].keys():
+            raise ValueError(
+                f"r38_r39 must be one of {OE_ADDR_RESISTOR_MAP['U7']['ad2'].keys()}"
+            )
+        if self.u6_dev_type not in ["MAX7328", "MAX7329"]:
+            raise ValueError("u6_dev_type must be either 'MAX7328' or 'MAX7329'")
+        if self.u7_dev_type not in ["MAX7328", "MAX7329"]:
+            raise ValueError("u7_dev_type must be either 'MAX7328' or 'MAX7329'")
 
         for key, lna_monitor in self.lna_monitor_hw_configs.items():
             if lna_monitor is not None and not isinstance(
@@ -121,7 +191,41 @@ class SOUKLNABiasControlMonitor:
                 self._turn_off_all_channels()
             else:
                 self._lna_monitors[refdes] = None
+        self._oe_u6 = MAX732_8_9(
+            dev_name="oe_u6",
+            i2c_bus=i2c_bus,
+            ad2=OE_ADDR_RESISTOR_MAP["U6"]["ad2"][hw_config.r32_r33],
+            ad1=OE_ADDR_RESISTOR_MAP["U6"]["ad1"][hw_config.r29_r31],
+            ad0=OE_ADDR_RESISTOR_MAP["U6"]["ad0"][hw_config.r28_r30],
+            dev_type=hw_config.u6_dev_type,
+        )
+        self._oe_u7 = MAX732_8_9(
+            dev_name="oe_u7",
+            i2c_bus=i2c_bus,
+            ad2=OE_ADDR_RESISTOR_MAP["U7"]["ad2"][hw_config.r38_r39],
+            ad1=OE_ADDR_RESISTOR_MAP["U7"]["ad1"][hw_config.r35_r37],
+            ad0=OE_ADDR_RESISTOR_MAP["U7"]["ad0"][hw_config.r34_r36],
+            dev_type=hw_config.u7_dev_type,
+        )
+        self.disable_all_lna_bias_outputs()
         self._hw_config = hw_config
+
+    @property
+    def bias_oe_status(self) -> Dict[int, bool]:
+        """Gets the bias output enable status for all channels.
+        Returns:
+            dict[int, bool]: The bias output enable status as {chn: status}.
+        """
+        status: Dict[int, bool] = {}
+        for chn in range(1, 15):
+            refdes, oe_dev_name, oe_bit = REFDES_OE_CHN_MAP[chn]
+            if oe_dev_name == "U6":
+                status[chn] = self._oe_u6.get_gpio_bit([oe_bit])[0]
+            elif oe_dev_name == "U7":
+                status[chn] = self._oe_u7.get_gpio_bit([oe_bit])[0]
+            else:
+                raise ValueError(f"Invalid OE device name: {oe_dev_name}")
+        return status
 
     @property
     def lna_local_voltage_ranges(self) -> Dict[int, Tuple[float, float]]:
@@ -147,7 +251,7 @@ class SOUKLNABiasControlMonitor:
             chn (int): The channel number (1-14), or
             chn (list[int]): A list of channel numbers.
         Returns:
-            dict[int, dict[str, float]]: The lna status values as {chn: {"remote voltage": ..., "local voltage": ..., "bias current": ...}}.
+            dict[int, dict[str, float]]: The lna status values as {chn: {"remote voltage": ..., "local voltage": ..., "bias current": ..., "output enable": ...}}.
         """
         if isinstance(chn, int):
             chn = [chn]
@@ -170,6 +274,7 @@ class SOUKLNABiasControlMonitor:
                     "remote voltage": float("nan"),
                     "local voltage": float("nan"),
                     "bias current": float("nan"),
+                    "output enable": float("nan"),
                 }
             else:
                 self._turn_on_channel(c)
@@ -177,9 +282,56 @@ class SOUKLNABiasControlMonitor:
                     "remote voltage": lna_monitor.read_remote_voltage(),
                     "local voltage": lna_monitor.read_local_voltage(),
                     "bias current": lna_monitor.read_bias_current(),
+                    "output enable": self.bias_oe_status().get(c, float("nan")),
                 }
                 self._turn_off_all_channels()
         return status
+
+    async def enable_lna_bias_output(self, chn: Union[int, List[int]], oe=True) -> None:
+        """Enables the bias output for the specified channel(s).
+        Args:
+            chn (int): The channel number (1-14), or
+            chn (list[int]): A list of channel numbers.
+            oe (bool): The output enable state (True to enable, False to disable).
+        """
+        if isinstance(chn, int):
+            chn = [chn]
+        await_turn_on = False
+        # Find the channels that need to be turned on only
+        if oe:
+            oe_status = self.bias_oe_status()
+            oe_status_to_set = {c: True for c in chn if not oe_status.get(c, False)}
+            if oe_status_to_set:
+                await_turn_on = True
+
+        for c in chn:
+            refdes, oe_dev_name, oe_bit = REFDES_OE_CHN_MAP[c]
+            if oe_dev_name == "U6":
+                self._oe_u6.set_gpio_bit([oe_bit], [oe])
+            elif oe_dev_name == "U7":
+                self._oe_u7.set_gpio_bit([oe_bit], [oe])
+            else:
+                raise ValueError(f"Invalid OE device name: {oe_dev_name}")
+
+        if await_turn_on:
+            await asyncio.sleep(AWAIT_TURN_ON_DELAY)
+
+    def disable_lna_bias_output(self, chn: Union[int, List[int]]) -> None:
+        """Disables the bias output for the specified channel(s).
+        Args:
+            chn (int): The channel number (1-14), or
+            chn (list[int]): A list of channel numbers.
+        """
+        self.enable_lna_bias_output(chn, oe=False)
+
+    def enable_all_lna_bias_outputs(self, oe=True) -> None:
+        """Enables the bias output for all channels."""
+        for c in REFDES_OE_CHN_MAP.keys():
+            self.enable_lna_bias_output(c, oe=oe)
+
+    def disable_all_lna_bias_outputs(self) -> None:
+        """Disables the bias output for all channels."""
+        self.enable_all_lna_bias_outputs(oe=False)
 
     def set_lna_bias_local(
         self, chn: Union[int, List[int]], v_local: float
@@ -260,7 +412,7 @@ class SOUKLNABiasControlMonitor:
         self,
         chn: Union[int, List[int]],
         v_local: Union[float, List[float]],
-        blind: bool = False,
+        blind: bool = True,
     ) -> Dict[int, Tuple[float, str]]:
         """Calculates and sets the DAC resistance to achieve the desired local voltage.
         Args:
@@ -349,6 +501,8 @@ class SOUKLNABiasControlMonitor:
                                 )
                                 break
                     else:
+                        if not self.bias_oe_status().get(c, False):
+                            self.enable_lna_bias_output(c)
                         if estimate_v_remotes[c][-1]["v_remote"] >= v:
                             if len(estimate_v_remotes[c]) == 1:
                                 actual_v_locals[c] = (
@@ -381,15 +535,14 @@ class SOUKLNABiasControlMonitor:
         return actual_v_locals
 
 
-def read_set_local_voltage_demo(
+async def read_set_local_voltage_demo(
     souk_lna_monitor: SOUKLNABiasControlMonitor, chn_idxes: List[int]
 ) -> None:
-    import time
     import math
     import random
 
+    lna_local_range = souk_lna_monitor.lna_local_voltage_ranges
     while True:
-        lna_local_range = souk_lna_monitor.lna_local_voltage_ranges
         for chn in chn_idxes:
             v_min, v_max = lna_local_range[chn]
             if any(math.isnan(v_range) for v_range in (v_min, v_max)):
@@ -405,15 +558,22 @@ def read_set_local_voltage_demo(
                 f"Set LNA chn {chn} local voltage to {v_set:.3f} V, actual: {actual_v_set[chn]:.3f} V"
             )
 
-        time.sleep(5)
-        status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
-        for chn in chn_idxes:
+            status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
             logging.info(
-                f"LNA chn {chn} status: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
+                f"LNA chn {chn} status before enable output: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
                 + f"Local Voltage = {status[chn]['local voltage']:.3f} V, "
                 + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
+                + f"Output Enable = {status[chn]['output enable']}"
             )
-        time.sleep(10)
+            souk_lna_monitor.enable_lna_bias_output(chn=chn_idxes)
+            status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
+            logging.info(
+                f"LNA chn {chn} status after enable output: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
+                + f"Local Voltage = {status[chn]['local voltage']:.3f} V, "
+                + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
+                + f"Output Enable = {status[chn]['output enable']}"
+            )
+            souk_lna_monitor.disable_lna_bias_output(chn=chn_idxes)
 
 
 def main():
@@ -426,8 +586,8 @@ def main():
         "--channels",
         type=int,
         nargs="+",
-        default=[1, 12, 13, 14],
-        help="List of LNA channel indices to monitor",
+        default=[7, 12],
+        help="List of LNA channel indices to monitor, starting index 1",
     )
     parser.add_argument(
         "--local",
@@ -446,12 +606,20 @@ def main():
         default=1.2,
         help="Voltage value for setting remote voltage demo",
     )
+    # hardware version 2 confict with non blind mode, so disable blind mode for now
+    # parser.add_argument(
+    #     "--blind",
+    #     action="store_true",
+    #     default=False,
+    #     help="Blindly setting remote voltage",
+    # )
+
     parser.add_argument(
-        "--blind",
+        "--disable_output",
         action="store_true",
-        default=False,
-        help="Blindly setting remote voltage",
+        help="Disable LNA bias output after setting",
     )
+
     parser.add_argument(
         "--debug",
         action="store_true",
@@ -481,110 +649,20 @@ def main():
 
     hw_config = SOUKLNABiasControlMonitorHWConfig(
         lna_monitor_hw_configs={
-            "M17": LNAMonitorHWConfig(
-                r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig(
-                    DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
-                ),
-                remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="low",
-                    CA1="float",
-                ),
-                imonitor_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="float",
-                ),
-                switch_status=True,
-                r_LDO_set_kOhm=150.0,
-                r_RTop1_kOhm=9.88,
-                r_RBot1_kOhm=12.4,
-                r_RAdj1_kOhm=1e7,
-                r_RSENSE_OHMS=10.0,
-            ),
+            "M17": None,
             "M18": None,
             "M19": None,
             "M20": None,
             "M21": None,
             "M22": None,
-            "M23": None,
+            "M23": LNAMonitorHWConfig.default_config(hw_version="v2"),
             "M24": None,
             "M25": None,
             "M26": None,
-            "M27": LNAMonitorHWConfig(
-                r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig(
-                    DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
-                ),
-                remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="low",
-                    CA1="float",
-                ),
-                imonitor_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="float",
-                ),
-                switch_status=True,
-                r_LDO_set_kOhm=150.0,
-                r_RTop1_kOhm=9.88,
-                r_RBot1_kOhm=12.4,
-                r_RAdj1_kOhm=1e7,
-                r_RSENSE_OHMS=10.0,
-            ),
-            "M28": LNAMonitorHWConfig(
-                r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig(
-                    DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
-                ),
-                remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="low",
-                    CA1="float",
-                ),
-                imonitor_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="float",
-                ),
-                switch_status=True,
-                r_LDO_set_kOhm=150.0,
-                r_RTop1_kOhm=9.88,
-                r_RBot1_kOhm=12.4,
-                r_RAdj1_kOhm=1e7,
-                r_RSENSE_OHMS=10.0,
-            ),
-            "M29": LNAMonitorHWConfig(
-                r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig(
-                    DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
-                ),
-                remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="low",
-                    CA1="float",
-                ),
-                imonitor_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="float",
-                ),
-                switch_status=True,
-                r_LDO_set_kOhm=150.0,
-                r_RTop1_kOhm=9.88,
-                r_RBot1_kOhm=12.4,
-                r_RAdj1_kOhm=1e7,
-                r_RSENSE_OHMS=10.0,
-            ),
-            "M30": LNAMonitorHWConfig(
-                r_dac_hw_config=AD511_0_2_4BCPZ_5_10_80HWConfig(
-                    DEV_ADDR=0x2C, RESOLUTION=128, R_FULL_SCALE_KOHM=10.0
-                ),
-                remote_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="low",
-                    CA1="float",
-                ),
-                imonitor_adc_hw_config=LTC2481CDDHWConfig(
-                    CA0="float",
-                    CA1="float",
-                ),
-                switch_status=True,
-                r_LDO_set_kOhm=150.0,
-                r_RTop1_kOhm=9.88,
-                r_RBot1_kOhm=12.4,
-                r_RAdj1_kOhm=1e7,
-                r_RSENSE_OHMS=10.0,
-            ),
+            "M27": None,
+            "M28": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M29": None,
+            "M30": None,
         },
         r9_r12="R12",
         r8_r10="R10",
@@ -597,10 +675,13 @@ def main():
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
 
     if args.local:
-        read_set_local_voltage_demo(souk_lna_monitor, args.channels)
+        asyncio.run(read_set_local_voltage_demo(souk_lna_monitor, args.channels))
+    if args.disable_output:
+        souk_lna_monitor.disable_lna_bias_output(args.channels)
+        logging.info(f"Disabled LNA bias output for channels: {args.channels}")
     if args.remote:
         result = souk_lna_monitor.set_lna_bias_remote(
-            chn=args.channels, v_local=args.value, blind=args.blind
+            chn=args.channels, v_local=args.value, blind=True
         )
         for chn in args.channels:
             logging.info(
@@ -614,6 +695,7 @@ def main():
                 f"LNA chn {chn} status: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
                 + f"Local Voltage = {status[chn]['local voltage']:.3f} V, "
                 + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
+                + f"Output Enable = {status[chn]['output enable']}"
             )
 
 
