@@ -29,9 +29,9 @@ class MAX732_8_9(I2CDevice):
         self,
         dev_name,
         i2c_bus,
-        ad2: Literal["high", "float", "low"],
-        ad1: Literal["high", "float", "low"],
-        ad0: Literal["high", "float", "low"],
+        ad2: Literal["high", "low"],
+        ad1: Literal["high", "low"],
+        ad0: Literal["high", "low"],
         dev_type: Literal["MAX7328", "MAX7329"],
     ):
         dev_addr = None
