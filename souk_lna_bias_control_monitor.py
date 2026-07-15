@@ -282,7 +282,7 @@ class SOUKLNABiasControlMonitor:
                     "remote voltage": lna_monitor.read_remote_voltage(),
                     "local voltage": lna_monitor.read_local_voltage(),
                     "bias current": lna_monitor.read_bias_current(),
-                    "output enable": self.bias_oe_status().get(c, float("nan")),
+                    "output enable": self.bias_oe_status.get(c, float("nan")),
                 }
                 self._turn_off_all_channels()
         return status
@@ -299,8 +299,9 @@ class SOUKLNABiasControlMonitor:
         await_turn_on = False
         # Find the channels that need to be turned on only
         if oe:
-            oe_status = self.bias_oe_status()
-            oe_status_to_set = {c: True for c in chn if not oe_status.get(c, False)}
+            oe_status_to_set = {
+                c: True for c in chn if not self.bias_oe_status.get(c, False)
+            }
             if oe_status_to_set:
                 await_turn_on = True
 
@@ -501,7 +502,7 @@ class SOUKLNABiasControlMonitor:
                                 )
                                 break
                     else:
-                        if not self.bias_oe_status().get(c, False):
+                        if not self.bias_oe_status.get(c, False):
                             self.enable_lna_bias_output(c)
                         if estimate_v_remotes[c][-1]["v_remote"] >= v:
                             if len(estimate_v_remotes[c]) == 1:
