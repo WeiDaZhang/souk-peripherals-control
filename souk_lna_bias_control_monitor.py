@@ -599,7 +599,7 @@ async def main():
         "--channels",
         type=int,
         nargs="+",
-        default=[7, 12],
+        default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         help="List of LNA channel indices to monitor, starting index 1",
     )
     parser.add_argument(
