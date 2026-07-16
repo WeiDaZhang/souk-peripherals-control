@@ -306,6 +306,9 @@ class SOUKLNABiasControlMonitor:
                 await_turn_on = True
 
         for c in chn:
+            logging.info(
+                f"Setting LNA chn {c} output enable to {'ON' if oe else 'OFF'}..."
+            )
             refdes, oe_dev_name, oe_bit = REFDES_OE_CHN_MAP[c]
             if oe_dev_name == "U6":
                 self._oe_u6.set_gpio_bit([oe_bit], [oe])
