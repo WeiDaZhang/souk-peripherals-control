@@ -589,7 +589,7 @@ async def read_set_local_voltage_demo(
             souk_lna_monitor.disable_lna_bias_output(chn=chn_idxes)
 
 
-def main():
+async def main():
     import argparse
     from datetime import datetime
     import os
@@ -696,12 +696,12 @@ def main():
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
 
     if args.local:
-        asyncio.run(read_set_local_voltage_demo(souk_lna_monitor, args.channels))
+        await read_set_local_voltage_demo(souk_lna_monitor, args.channels)
     if args.disable_output:
         souk_lna_monitor.disable_lna_bias_output(args.channels)
         logging.info(f"Disabled LNA bias output for channels: {args.channels}")
     if args.remote:
-        result = souk_lna_monitor.set_lna_bias_remote(
+        result = await souk_lna_monitor.set_lna_bias_remote(
             chn=args.channels, v_local=args.value, blind=True
         )
         for chn in args.channels:
@@ -721,4 +721,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
