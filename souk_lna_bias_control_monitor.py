@@ -287,7 +287,7 @@ class SOUKLNABiasControlMonitor:
                 self._turn_off_all_channels()
         return status
 
-    async def enable_lna_bias_output(self, chn: Union[int, List[int]], oe=True) -> None:
+    async def enable_lna_bias_output(self, chn: Union[int, List[int]]) -> None:
         """Enables the bias output for the specified channel(s).
         Args:
             chn (int): The channel number (1-14), or
@@ -298,22 +298,19 @@ class SOUKLNABiasControlMonitor:
             chn = [chn]
         await_turn_on = False
         # Find the channels that need to be turned on only
-        if oe:
-            oe_status_to_set = {
-                c: True for c in chn if not self.bias_oe_status.get(c, False)
-            }
-            if oe_status_to_set:
-                await_turn_on = True
+        oe_status_to_set = {
+            c: True for c in chn if not self.bias_oe_status.get(c, False)
+        }
+        if oe_status_to_set:
+            await_turn_on = True
 
         for c in chn:
-            logging.info(
-                f"Setting LNA chn {c} output enable to {'ON' if oe else 'OFF'}..."
-            )
-            refdes, oe_dev_name, oe_bit = REFDES_OE_CHN_MAP[c]
+            logging.info(f"Enable LNA chn {c} output ...")
+            oe_dev_name, oe_bit = REFDES_OE_CHN_MAP[c]
             if oe_dev_name == "U6":
-                self._oe_u6.set_gpio_bit([oe_bit], [oe])
+                self._oe_u6.set_gpio_bit([oe_bit], [True])
             elif oe_dev_name == "U7":
-                self._oe_u7.set_gpio_bit([oe_bit], [oe])
+                self._oe_u7.set_gpio_bit([oe_bit], [True])
             else:
                 raise ValueError(f"Invalid OE device name: {oe_dev_name}")
 
@@ -326,16 +323,28 @@ class SOUKLNABiasControlMonitor:
             chn (int): The channel number (1-14), or
             chn (list[int]): A list of channel numbers.
         """
-        self.enable_lna_bias_output(chn, oe=False)
+        if isinstance(chn, int):
+            chn = [chn]
 
-    def enable_all_lna_bias_outputs(self, oe=True) -> None:
+        for c in chn:
+            logging.info(f"Disable LNA chn {c} output ...")
+            oe_dev_name, oe_bit = REFDES_OE_CHN_MAP[c]
+            if oe_dev_name == "U6":
+                self._oe_u6.set_gpio_bit([oe_bit], [False])
+            elif oe_dev_name == "U7":
+                self._oe_u7.set_gpio_bit([oe_bit], [False])
+            else:
+                raise ValueError(f"Invalid OE device name: {oe_dev_name}")
+
+    async def enable_all_lna_bias_outputs(self) -> None:
         """Enables the bias output for all channels."""
         for c in REFDES_OE_CHN_MAP.keys():
-            self.enable_lna_bias_output(c, oe=oe)
+            await self.enable_lna_bias_output(c)
 
     def disable_all_lna_bias_outputs(self) -> None:
         """Disables the bias output for all channels."""
-        self.enable_all_lna_bias_outputs(oe=False)
+        for c in REFDES_OE_CHN_MAP.keys():
+            self.disable_lna_bias_output(c)
 
     def set_lna_bias_local(
         self, chn: Union[int, List[int]], v_local: float
@@ -412,7 +421,7 @@ class SOUKLNABiasControlMonitor:
         if except_chn is not None:
             self._root_switch.turn_on_channel(except_chn)
 
-    def set_lna_bias_remote(
+    async def set_lna_bias_remote(
         self,
         chn: Union[int, List[int]],
         v_local: Union[float, List[float]],
@@ -506,7 +515,7 @@ class SOUKLNABiasControlMonitor:
                                 break
                     else:
                         if not self.bias_oe_status.get(c, False):
-                            self.enable_lna_bias_output(c)
+                            await self.enable_lna_bias_output(c)
                         if estimate_v_remotes[c][-1]["v_remote"] >= v:
                             if len(estimate_v_remotes[c]) == 1:
                                 actual_v_locals[c] = (
@@ -569,7 +578,7 @@ async def read_set_local_voltage_demo(
                 + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
                 + f"Output Enable = {status[chn]['output enable']}"
             )
-            souk_lna_monitor.enable_lna_bias_output(chn=chn_idxes)
+            await souk_lna_monitor.enable_lna_bias_output(chn=chn_idxes)
             status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
             logging.info(
                 f"LNA chn {chn} status after enable output: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
