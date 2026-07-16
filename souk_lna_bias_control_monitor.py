@@ -709,6 +709,9 @@ async def main():
                 f"Set LNA chn {chn} remote voltage to {args.value:.3f} V, "
                 + f"actual: {result[chn][0]:.3f} V, message: {result[chn][1]}"
             )
+    if args.disable_output:
+        souk_lna_monitor.disable_lna_bias_output(args.channels)
+        logging.info(f"Disabled LNA bias output for channels: {args.channels}")
     if args.status:
         status = souk_lna_monitor.read_lna_status(chn=args.channels)
         for chn in args.channels:
