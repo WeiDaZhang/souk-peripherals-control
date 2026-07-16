@@ -44,7 +44,7 @@ class LNAMonitorHWConfig:
                 r_RBot1_kOhm=8.2,
                 r_RAdj1_kOhm=200.0,
                 r_LDO_set_kOhm=150.0,
-                r_RSENSE_OHMS=100.0,  # TODO: Verify this value for v2 hardware
+                r_RSENSE_OHMS=10.0,
             )
         else:
             return cls(

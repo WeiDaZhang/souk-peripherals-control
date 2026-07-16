@@ -703,7 +703,7 @@ def main():
             logging.info(
                 f"LNA chn {chn} status: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
                 + f"Local Voltage = {status[chn]['local voltage']:.3f} V, "
-                + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
+                + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA, "
                 + f"Output Enable = {status[chn]['output enable']}"
             )
 
