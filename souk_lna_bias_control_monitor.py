@@ -162,6 +162,24 @@ class SOUKLNABiasControlMonitorHWConfig:
 
 class SOUKLNABiasControlMonitor:
     def __init__(self, i2c_bus: SMBus, hw_config: SOUKLNABiasControlMonitorHWConfig):
+        self._oe_u6 = MAX732_8_9(
+            dev_name="oe_u6",
+            i2c_bus=i2c_bus,
+            ad2=OE_ADDR_RESISTOR_MAP["U6"]["ad2"][hw_config.r32_r33],
+            ad1=OE_ADDR_RESISTOR_MAP["U6"]["ad1"][hw_config.r29_r31],
+            ad0=OE_ADDR_RESISTOR_MAP["U6"]["ad0"][hw_config.r28_r30],
+            dev_type=hw_config.u6_dev_type,
+        )
+        self._oe_u7 = MAX732_8_9(
+            dev_name="oe_u7",
+            i2c_bus=i2c_bus,
+            ad2=OE_ADDR_RESISTOR_MAP["U7"]["ad2"][hw_config.r38_r39],
+            ad1=OE_ADDR_RESISTOR_MAP["U7"]["ad1"][hw_config.r35_r37],
+            ad0=OE_ADDR_RESISTOR_MAP["U7"]["ad0"][hw_config.r34_r36],
+            dev_type=hw_config.u7_dev_type,
+        )
+        self._oe_u6.set_gpio_bit([6], [True])
+        self.disable_all_lna_bias_outputs()
         self._root_switch = TCA9548(
             dev_name="root_switch",
             i2c_bus=i2c_bus,
@@ -191,23 +209,6 @@ class SOUKLNABiasControlMonitor:
                 self._turn_off_all_channels()
             else:
                 self._lna_monitors[refdes] = None
-        self._oe_u6 = MAX732_8_9(
-            dev_name="oe_u6",
-            i2c_bus=i2c_bus,
-            ad2=OE_ADDR_RESISTOR_MAP["U6"]["ad2"][hw_config.r32_r33],
-            ad1=OE_ADDR_RESISTOR_MAP["U6"]["ad1"][hw_config.r29_r31],
-            ad0=OE_ADDR_RESISTOR_MAP["U6"]["ad0"][hw_config.r28_r30],
-            dev_type=hw_config.u6_dev_type,
-        )
-        self._oe_u7 = MAX732_8_9(
-            dev_name="oe_u7",
-            i2c_bus=i2c_bus,
-            ad2=OE_ADDR_RESISTOR_MAP["U7"]["ad2"][hw_config.r38_r39],
-            ad1=OE_ADDR_RESISTOR_MAP["U7"]["ad1"][hw_config.r35_r37],
-            ad0=OE_ADDR_RESISTOR_MAP["U7"]["ad0"][hw_config.r34_r36],
-            dev_type=hw_config.u7_dev_type,
-        )
-        self.disable_all_lna_bias_outputs()
         self._hw_config = hw_config
 
     @property
