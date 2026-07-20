@@ -664,19 +664,19 @@ async def main():
     hw_config = SOUKLNABiasControlMonitorHWConfig(
         lna_monitor_hw_configs={
             "M17": LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M18": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M19": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M20": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M21": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M22": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M23": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M24": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M25": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M26": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M27": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M28": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M29": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
-            "M30": None,  # LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M18": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M19": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M20": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M21": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M22": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M23": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M24": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M25": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M26": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M27": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M28": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M29": LNAMonitorHWConfig.default_config(hw_version="v2"),
+            "M30": LNAMonitorHWConfig.default_config(hw_version="v2"),
         },
         r9_r12="R12",
         r8_r10="R10",
@@ -710,9 +710,6 @@ async def main():
                 f"Set LNA chn {chn} remote voltage to {args.value:.3f} V, "
                 + f"actual: {result[chn][0]:.3f} V, message: {result[chn][1]}"
             )
-    if args.disable_output:
-        souk_lna_monitor.disable_lna_bias_output(args.channels)
-        logging.info(f"Disabled LNA bias output for channels: {args.channels}")
     if args.status:
         status = souk_lna_monitor.read_lna_status(chn=args.channels)
         for chn in args.channels:
@@ -722,6 +719,9 @@ async def main():
                 + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA, "
                 + f"Output Enable = {status[chn]['output enable']}"
             )
+    if args.disable_output:
+        souk_lna_monitor.disable_lna_bias_output(args.channels)
+        logging.info(f"Disabled LNA bias output for channels: {args.channels}")
 
 
 if __name__ == "__main__":
