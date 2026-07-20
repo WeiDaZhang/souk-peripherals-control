@@ -290,13 +290,15 @@ class SOUKLNABiasControlMonitor:
                 }
             else:
                 self._turn_on_channel(c)
-                status[c] = {
-                    "remote voltage": lna_monitor.read_remote_voltage(),
-                    "local voltage": lna_monitor.read_local_voltage(),
-                    "bias current": lna_monitor.read_bias_current(),
-                    "output enable": self.bias_oe_status.get(c, float("nan")),
-                }
-                self._turn_off_all_channels()
+                try:
+                    status[c] = {
+                        "remote voltage": lna_monitor.read_remote_voltage(),
+                        "local voltage": lna_monitor.read_local_voltage(),
+                        "bias current": lna_monitor.read_bias_current(),
+                        "output enable": self.bias_oe_status.get(c, float("nan")),
+                    }
+                finally:
+                    self._turn_off_all_channels()
         return status
 
     def enable_lna_bias_output(self, chn: Union[int, List[int]]) -> None:
@@ -389,8 +391,10 @@ class SOUKLNABiasControlMonitor:
                 actual_v_locals[c] = float("nan")
             else:
                 self._turn_on_channel(c)
-                actual_v_locals[c] = lna_monitor.set_local_voltage(v_local)
-                self._turn_off_all_channels()
+                try:
+                    actual_v_locals[c] = lna_monitor.set_local_voltage(v_local)
+                finally:
+                    self._turn_off_all_channels()
         return actual_v_locals
 
     def _turn_on_channel(self, chn: int) -> None:
@@ -477,86 +481,88 @@ class SOUKLNABiasControlMonitor:
                 actual_v_locals[c] = (float("nan"), "LNA monitor not configured.")
             else:
                 self._turn_on_channel(c)
-                local_voltage_range = lna_monitor.local_voltage_range
-                # set to lowest local voltage first
-                lna_monitor.set_local_voltage(local_voltage_range[0])
-                estimate_v_remotes[c] = []
-                while True:
-                    v_estimation = lna_monitor.estimate_lna_voltage()
-                    estimate_v_remotes[c].append(v_estimation)
-                    if not blind:
-                        if not (
-                            estimate_v_remotes[c][-1]["v_remote"]
-                            > estimate_v_remotes[c][-1]["v_lna"]
-                            > 0
-                        ):
-                            actual_v_locals[c] = (
-                                estimate_v_remotes[c][-1]["v_remote"],
-                                f"Cannot set remote voltage for channel {c}, "
-                                + f"because estimated LNA voltage is not between 0 V and remote voltage {estimate_v_remotes[c][-1]['v_remote']:.3f} V. "
-                                + "Resistor values or switch status may be incorrect for this channel.",
-                            )
-                            break
-                        if estimate_v_remotes[c][-1]["v_lna"] >= v:
-                            if len(estimate_v_remotes[c]) == 1:
-                                actual_v_locals[c] = (
-                                    estimate_v_remotes[c][-1]["v_lna"],
-                                    "Lowest local voltage already exceeds desired remote voltage.",
-                                )
-                            elif abs(estimate_v_remotes[c][-2]["v_lna"] - v) < abs(
-                                estimate_v_remotes[c][-1]["v_lna"] - v
-                            ):
-                                lna_monitor._r_dac.increase_tap_pos()
-                                actual_v_locals[c] = (
-                                    estimate_v_remotes[c][-2]["v_lna"],
-                                    "",
-                                )
-                            else:
-                                actual_v_locals[c] = (
-                                    estimate_v_remotes[c][-1]["v_lna"],
-                                    "",
-                                )
-                            break
-                        else:
-                            decr_tap = lna_monitor._r_dac.decrease_tap_pos()
-                            if not decr_tap:
-                                actual_v_locals[c] = (
-                                    estimate_v_remotes[c][-1]["v_lna"],
-                                    f"Reached maximum local voltage for channel {c} but desired remote voltage not achieved.",
-                                )
-                                break
-                    else:
-                        if not self.bias_oe_status.get(c, False):
-                            self.enable_lna_bias_output(c)
-                        if estimate_v_remotes[c][-1]["v_remote"] >= v:
-                            if len(estimate_v_remotes[c]) == 1:
-                                actual_v_locals[c] = (
-                                    estimate_v_remotes[c][-1]["v_remote"],
-                                    "Lowest local voltage already exceeds desired remote voltage.",
-                                )
-                            elif abs(estimate_v_remotes[c][-1]["v_remote"] - v) < abs(
-                                estimate_v_remotes[c][-2]["v_remote"] - v
+                try:
+                    local_voltage_range = lna_monitor.local_voltage_range
+                    # set to lowest local voltage first
+                    lna_monitor.set_local_voltage(local_voltage_range[0])
+                    if blind and not self.bias_oe_status.get(c, False):
+                        self.enable_lna_bias_output(c)
+                    estimate_v_remotes[c] = []
+                    while True:
+                        v_estimation = lna_monitor.estimate_lna_voltage()
+                        estimate_v_remotes[c].append(v_estimation)
+                        if not blind:
+                            if not (
+                                estimate_v_remotes[c][-1]["v_remote"]
+                                > estimate_v_remotes[c][-1]["v_lna"]
+                                > 0
                             ):
                                 actual_v_locals[c] = (
                                     estimate_v_remotes[c][-1]["v_remote"],
-                                    "",
-                                )
-                            else:
-                                lna_monitor._r_dac.increase_tap_pos()
-                                actual_v_locals[c] = (
-                                    estimate_v_remotes[c][-2]["v_remote"],
-                                    "",
-                                )
-                            break
-                        else:
-                            decr_tap = lna_monitor._r_dac.decrease_tap_pos()
-                            if not decr_tap:
-                                actual_v_locals[c] = (
-                                    estimate_v_remotes[c][-1]["v_remote"],
-                                    f"Reached maximum local voltage for channel {c} but desired remote voltage not achieved.",
+                                    f"Cannot set remote voltage for channel {c}, "
+                                    + f"because estimated LNA voltage is not between 0 V and remote voltage {estimate_v_remotes[c][-1]['v_remote']:.3f} V. "
+                                    + "Resistor values or switch status may be incorrect for this channel.",
                                 )
                                 break
-                self._turn_off_all_channels()
+                            if estimate_v_remotes[c][-1]["v_lna"] >= v:
+                                if len(estimate_v_remotes[c]) == 1:
+                                    actual_v_locals[c] = (
+                                        estimate_v_remotes[c][-1]["v_lna"],
+                                        "Lowest local voltage already exceeds desired remote voltage.",
+                                    )
+                                elif abs(estimate_v_remotes[c][-2]["v_lna"] - v) < abs(
+                                    estimate_v_remotes[c][-1]["v_lna"] - v
+                                ):
+                                    lna_monitor._r_dac.increase_tap_pos()
+                                    actual_v_locals[c] = (
+                                        estimate_v_remotes[c][-2]["v_lna"],
+                                        "",
+                                    )
+                                else:
+                                    actual_v_locals[c] = (
+                                        estimate_v_remotes[c][-1]["v_lna"],
+                                        "",
+                                    )
+                                break
+                            else:
+                                decr_tap = lna_monitor._r_dac.decrease_tap_pos()
+                                if not decr_tap:
+                                    actual_v_locals[c] = (
+                                        estimate_v_remotes[c][-1]["v_lna"],
+                                        f"Reached maximum local voltage for channel {c} but desired remote voltage not achieved.",
+                                    )
+                                    break
+                        else:
+                            if estimate_v_remotes[c][-1]["v_remote"] >= v:
+                                if len(estimate_v_remotes[c]) == 1:
+                                    actual_v_locals[c] = (
+                                        estimate_v_remotes[c][-1]["v_remote"],
+                                        "Lowest local voltage already exceeds desired remote voltage.",
+                                    )
+                                elif abs(estimate_v_remotes[c][-1]["v_remote"] - v) < abs(
+                                    estimate_v_remotes[c][-2]["v_remote"] - v
+                                ):
+                                    actual_v_locals[c] = (
+                                        estimate_v_remotes[c][-1]["v_remote"],
+                                        "",
+                                    )
+                                else:
+                                    lna_monitor._r_dac.increase_tap_pos()
+                                    actual_v_locals[c] = (
+                                        estimate_v_remotes[c][-2]["v_remote"],
+                                        "",
+                                    )
+                                break
+                            else:
+                                decr_tap = lna_monitor._r_dac.decrease_tap_pos()
+                                if not decr_tap:
+                                    actual_v_locals[c] = (
+                                        estimate_v_remotes[c][-1]["v_remote"],
+                                        f"Reached maximum local voltage for channel {c} but desired remote voltage not achieved.",
+                                    )
+                                    break
+                finally:
+                    self._turn_off_all_channels()
         return actual_v_locals
 
 
