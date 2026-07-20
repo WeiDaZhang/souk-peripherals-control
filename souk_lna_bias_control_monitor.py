@@ -2,7 +2,6 @@ import time
 from typing import List, Literal, Dict, Tuple, Union
 from dataclasses import dataclass
 import logging
-import asyncio
 from lna_voltages_utils import v_remote
 from smbus2 import SMBus
 
@@ -292,7 +291,7 @@ class SOUKLNABiasControlMonitor:
                 self._turn_off_all_channels()
         return status
 
-    async def enable_lna_bias_output(self, chn: Union[int, List[int]]) -> None:
+    def enable_lna_bias_output(self, chn: Union[int, List[int]]) -> None:
         """Enables the bias output for the specified channel(s).
         Args:
             chn (int): The channel number (1-14), or
@@ -320,7 +319,7 @@ class SOUKLNABiasControlMonitor:
                 raise ValueError(f"Invalid OE device name: {oe_dev_name}")
 
         if await_turn_on:
-            await asyncio.sleep(AWAIT_TURN_ON_DELAY)
+            time.sleep(AWAIT_TURN_ON_DELAY)
 
     def disable_lna_bias_output(self, chn: Union[int, List[int]]) -> None:
         """Disables the bias output for the specified channel(s).
@@ -341,10 +340,10 @@ class SOUKLNABiasControlMonitor:
             else:
                 raise ValueError(f"Invalid OE device name: {oe_dev_name}")
 
-    async def enable_all_lna_bias_outputs(self) -> None:
+    def enable_all_lna_bias_outputs(self) -> None:
         """Enables the bias output for all channels."""
         for c in REFDES_OE_CHN_MAP.keys():
-            await self.enable_lna_bias_output(c)
+            self.enable_lna_bias_output(c)
 
     def disable_all_lna_bias_outputs(self) -> None:
         """Disables the bias output for all channels."""
@@ -426,7 +425,7 @@ class SOUKLNABiasControlMonitor:
         if except_chn is not None:
             self._root_switch.turn_on_channel(except_chn)
 
-    async def set_lna_bias_remote(
+    def set_lna_bias_remote(
         self,
         chn: Union[int, List[int]],
         v_local: Union[float, List[float]],
@@ -520,7 +519,7 @@ class SOUKLNABiasControlMonitor:
                                 break
                     else:
                         if not self.bias_oe_status.get(c, False):
-                            await self.enable_lna_bias_output(c)
+                            self.enable_lna_bias_output(c)
                         if estimate_v_remotes[c][-1]["v_remote"] >= v:
                             if len(estimate_v_remotes[c]) == 1:
                                 actual_v_locals[c] = (
@@ -553,7 +552,7 @@ class SOUKLNABiasControlMonitor:
         return actual_v_locals
 
 
-async def read_set_local_voltage_demo(
+def read_set_local_voltage_demo(
     souk_lna_monitor: SOUKLNABiasControlMonitor, chn_idxes: List[int]
 ) -> None:
     import math
@@ -583,7 +582,7 @@ async def read_set_local_voltage_demo(
                 + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
                 + f"Output Enable = {status[chn]['output enable']}"
             )
-            await souk_lna_monitor.enable_lna_bias_output(chn=chn_idxes)
+            souk_lna_monitor.enable_lna_bias_output(chn=chn_idxes)
             status = souk_lna_monitor.read_lna_status(chn=chn_idxes)
             logging.info(
                 f"LNA chn {chn} status after enable output: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
@@ -594,7 +593,7 @@ async def read_set_local_voltage_demo(
             souk_lna_monitor.disable_lna_bias_output(chn=chn_idxes)
 
 
-async def main():
+def main():
     import argparse
     from datetime import datetime
     import os
@@ -701,12 +700,12 @@ async def main():
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
 
     if args.local:
-        await read_set_local_voltage_demo(souk_lna_monitor, args.channels)
+        read_set_local_voltage_demo(souk_lna_monitor, args.channels)
     if args.disable_output:
         souk_lna_monitor.disable_lna_bias_output(args.channels)
         logging.info(f"Disabled LNA bias output for channels: {args.channels}")
     if args.remote:
-        result = await souk_lna_monitor.set_lna_bias_remote(
+        result = souk_lna_monitor.set_lna_bias_remote(
             chn=args.channels, v_local=args.value, blind=True
         )
         status = souk_lna_monitor.read_lna_status(chn=args.channels)
@@ -736,4 +735,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
