@@ -3,6 +3,11 @@ import logging
 import time
 
 RETRY_DELAY_SECONDS = 0.25
+MAX_RETRIES = 3
+
+
+class I2CDeviceError(OSError):
+    """Raised when an I2C operation fails after exhausting retries."""
 
 
 class I2CDevice:
@@ -10,12 +15,7 @@ class I2CDevice:
         self.addr = dev_addr
         self.name = dev_name
         self._bus = i2c_bus
-        try:
-            self._bus.read_byte(self.addr)
-        except Exception as e:
-            raise ConnectionError(
-                f"Failed to communicate with device at address {self.addr}: {e}"
-            )
+        self._retry("probing device", self._bus.read_byte, self.addr)
 
     @property
     def dev_addr(self) -> int:
@@ -25,40 +25,51 @@ class I2CDevice:
     def dev_name(self) -> str:
         return self.name
 
+    def _retry(self, op_desc: str, func, *args):
+        last_error = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                return func(*args)
+            # OSError also covers BlockingIOError/TimeoutError, which are
+            # the errors actually raised for a busy/unresponsive bus.
+            except OSError as e:
+                last_error = e
+                if attempt < MAX_RETRIES:
+                    logging.warning(
+                        f"Error {op_desc} on device {self.name} at address {self.addr} "
+                        f"(attempt {attempt}/{MAX_RETRIES}): {e}, retrying after delay ..."
+                    )
+                    time.sleep(RETRY_DELAY_SECONDS)
+        logging.error(
+            f"Failed {op_desc} on device {self.name} at address {self.addr} "
+            f"after {MAX_RETRIES} attempts: {last_error}"
+        )
+        raise I2CDeviceError(
+            f"Failed {op_desc} on device {self.name} at address {self.addr} "
+            f"after {MAX_RETRIES} attempts: {last_error}"
+        ) from last_error
+
     def read(self, length: int = 1, register: int = None) -> list:
         logging.debug(
             f"Reading {length} bytes from device {self.name} at address {self.addr}"
         )
         if length == 1:
             if register is None:
-                try:
-                    return [self._bus.read_byte(self.addr)]
-                except OSError as e:
-                    logging.warning(
-                        f"Error reading byte from device {self.name} at address {self.addr}: {e}, trying again after delay ..."
-                    )
-                    time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
-                    return [self._bus.read_byte(self.addr)]
-            else:
-                try:
-                    return [self._bus.read_byte_data(self.addr, register)]
-                except OSError as e:
-                    logging.warning(
-                        f"Error reading byte data from device {self.name} at address {self.addr}, register {register}: {e}, trying again after delay ..."
-                    )
-                    time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
-                    return [self._bus.read_byte_data(self.addr, register)]
-        else:
-            if register is None:
-                register = 0x00  # default register
-            try:
-                return self._bus.read_i2c_block_data(self.addr, register, length)
-            except OSError as e:
-                logging.warning(
-                    f"Error reading i2c block data from device {self.name} at address {self.addr}, register {register}: {e}, trying again after delay ..."
+                return [self._retry("reading byte", self._bus.read_byte, self.addr)]
+            return [
+                self._retry(
+                    "reading byte data", self._bus.read_byte_data, self.addr, register
                 )
-                time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
-                return self._bus.read_i2c_block_data(self.addr, register, length)
+            ]
+        if register is None:
+            register = 0x00  # default register
+        return self._retry(
+            "reading i2c block data",
+            self._bus.read_i2c_block_data,
+            self.addr,
+            register,
+            length,
+        )
 
     def write(self, data, register: int = None) -> None:
         logging.debug(
@@ -66,33 +77,24 @@ class I2CDevice:
         )
         if isinstance(data, int):
             if register is None:
-                try:
-                    self._bus.write_byte(self.addr, data)
-                except OSError as e:
-                    logging.warning(
-                        f"Error writing byte to device {self.name} at address {self.addr}: {e}, trying again after delay ..."
-                    )
-                    time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
-                    self._bus.write_byte(self.addr, data)
+                self._retry("writing byte", self._bus.write_byte, self.addr, data)
             else:
-                try:
-                    self._bus.write_byte_data(self.addr, register, data)
-                except OSError as e:
-                    logging.warning(
-                        f"Error writing byte data to device {self.name} at address {self.addr}, register {register}: {e}, trying again after delay ..."
-                    )
-                    time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
-                    self._bus.write_byte_data(self.addr, register, data)
+                self._retry(
+                    "writing byte data",
+                    self._bus.write_byte_data,
+                    self.addr,
+                    register,
+                    data,
+                )
         elif isinstance(data, list):
             if register is None:
                 register = 0x00  # default register
-            try:
-                self._bus.write_i2c_block_data(self.addr, register, data)
-            except OSError as e:
-                logging.warning(
-                    f"Error writing i2c block data to device {self.name} at address {self.addr}, register {register}: {e}, trying again after delay ..."
-                )
-                time.sleep(RETRY_DELAY_SECONDS)  # small delay before retry
-                self._bus.write_i2c_block_data(self.addr, register, data)
+            self._retry(
+                "writing i2c block data",
+                self._bus.write_i2c_block_data,
+                self.addr,
+                register,
+                data,
+            )
         else:
             raise ValueError("Data must be an integer or a list of integers.")
