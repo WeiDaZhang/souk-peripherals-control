@@ -1,3 +1,4 @@
+from datetime import time
 from typing import List, Literal, Dict, Tuple, Union
 from dataclasses import dataclass
 import logging
@@ -178,7 +179,10 @@ class SOUKLNABiasControlMonitor:
             ad0=OE_ADDR_RESISTOR_MAP["U7"]["ad0"][hw_config.r34_r36],
             dev_type=hw_config.u7_dev_type,
         )
+        self._oe_u6.set_gpio_bit([6], [True])
         self._oe_u6.set_gpio_bit([6], [False])
+        time.sleep(0.1)  # small delay to ensure the GPIO state is set
+        self._oe_u6.set_gpio_bit([6], [True])
         self.disable_all_lna_bias_outputs()
         self._root_switch = TCA9548(
             dev_name="root_switch",
