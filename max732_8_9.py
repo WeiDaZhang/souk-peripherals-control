@@ -94,13 +94,15 @@ class MAX732_8_9(I2CDevice):
                 new_value &= ~(1 << bit)
         self.write_gpio(new_value)
 
-    def pulse_gpio_bit(self, bit: int, pulse_width_ms: int = 100) -> None:
+    def pulse_gpio_bit(
+        self, bit: int, pulse_width_ms: int = 100, polarity: bool = True
+    ) -> None:
         if not (0 <= bit <= 7):
             raise ValueError("Bit must be between 0 and 7.")
-        self.set_gpio_bit([bit], [False])
-        self.set_gpio_bit([bit], [True])
+        self.set_gpio_bit([bit], [not polarity])
+        self.set_gpio_bit([bit], [polarity])
         time.sleep(pulse_width_ms / 1000.0)
-        self.set_gpio_bit([bit], [False])
+        self.set_gpio_bit([bit], [not polarity])
 
     @property
     def addr_pin_ad2(self) -> Literal["high", "low"]:

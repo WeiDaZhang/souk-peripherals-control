@@ -73,6 +73,8 @@ OE_ADDR_RESISTOR_MAP = {
 
 ROOT_LEAF_CONN = 7
 
+OE_PIN_I2C_SWITCH_RESET = 6
+
 AWAIT_TURN_ON_DELAY = 1  # seconds
 
 
@@ -178,10 +180,7 @@ class SOUKLNABiasControlMonitor:
             ad0=OE_ADDR_RESISTOR_MAP["U7"]["ad0"][hw_config.r34_r36],
             dev_type=hw_config.u7_dev_type,
         )
-        self._oe_u6.set_gpio_bit([6], [True])
-        self._oe_u6.set_gpio_bit([6], [False])
-        time.sleep(0.1)  # small delay to ensure the GPIO state is set
-        self._oe_u6.set_gpio_bit([6], [True])
+        self._oe_u6.pulse_gpio_bit(OE_PIN_I2C_SWITCH_RESET, polarity=False)
         self.disable_all_lna_bias_outputs()
         self._root_switch = TCA9548(
             dev_name="root_switch",
@@ -203,12 +202,26 @@ class SOUKLNABiasControlMonitor:
         self._lna_monitors: Dict[str, Union[LNAMonitor, None]] = {}
         for refdes, lna_hw_config in hw_config.lna_monitor_hw_configs.items():
             if lna_hw_config is not None:
+                logging.info(
+                    f"Initialising monitor channel {list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]} ..."
+                )
                 self._turn_on_channel(
                     list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]
                 )
-                self._lna_monitors[refdes] = LNAMonitor(
-                    i2c_bus=i2c_bus, hw_config=lna_hw_config
-                )
+                try:
+                    self._lna_monitors[refdes] = LNAMonitor(
+                        i2c_bus=i2c_bus, hw_config=lna_hw_config
+                    )
+                except OSError as e:
+                    logging.warning(
+                        f"Initialising monitor channel {list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]} failed: {e}, removed from the controlling channel list."
+                    )
+                    self._lna_monitors[refdes] = None
+                except BlockingIOError as e:
+                    logging.warning(
+                        f"Initialising monitor channel {list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]} failed: {e}, removed from the controlling channel list."
+                    )
+                    self._lna_monitors[refdes] = None
                 self._turn_off_all_channels()
             else:
                 self._lna_monitors[refdes] = None
