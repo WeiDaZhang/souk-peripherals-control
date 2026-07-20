@@ -217,11 +217,6 @@ class SOUKLNABiasControlMonitor:
                         f"Initialising monitor channel {list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]} failed: {e}, removed from the controlling channel list."
                     )
                     self._lna_monitors[refdes] = None
-                except BlockingIOError as e:
-                    logging.warning(
-                        f"Initialising monitor channel {list(REFDES_LNA_MONITOR_CHN_MAP[refdes].keys())[0]} failed: {e}, removed from the controlling channel list."
-                    )
-                    self._lna_monitors[refdes] = None
                 self._turn_off_all_channels()
             else:
                 self._lna_monitors[refdes] = None
