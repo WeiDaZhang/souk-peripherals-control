@@ -705,10 +705,17 @@ async def main():
         result = await souk_lna_monitor.set_lna_bias_remote(
             chn=args.channels, v_local=args.value, blind=True
         )
+        status = souk_lna_monitor.read_lna_status(chn=args.channels)
         for chn in args.channels:
             logging.info(
                 f"Set LNA chn {chn} remote voltage to {args.value:.3f} V, "
                 + f"actual: {result[chn][0]:.3f} V, message: {result[chn][1]}"
+            )
+            logging.info(
+                f"LNA chn {chn} status: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
+                + f"Local Voltage = {status[chn]['local voltage']:.3f} V, "
+                + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA, "
+                + f"Output Enable = {status[chn]['output enable']}"
             )
     if args.status:
         status = souk_lna_monitor.read_lna_status(chn=args.channels)
