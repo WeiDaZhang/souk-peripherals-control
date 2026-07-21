@@ -180,7 +180,7 @@ class SOUKLNABiasControlMonitor:
             ad0=OE_ADDR_RESISTOR_MAP["U7"]["ad0"][hw_config.r34_r36],
             dev_type=hw_config.u7_dev_type,
         )
-        self._oe_u6.pulse_gpio_bit(OE_PIN_I2C_SWITCH_RESET, polarity=False)
+        self._reset_channel_switch()
         self.disable_all_lna_bias_outputs()
         self._root_switch = TCA9548(
             dev_name="root_switch",
@@ -359,6 +359,9 @@ class SOUKLNABiasControlMonitor:
         """Disables the bias output for all channels."""
         for c in REFDES_OE_CHN_MAP.keys():
             self.disable_lna_bias_output(c)
+
+    def _reset_channel_switch(self):
+        self._oe_u6.pulse_gpio_bit(OE_PIN_I2C_SWITCH_RESET, polarity=False)
 
     def set_lna_bias_local(
         self, chn: Union[int, List[int]], v_local: float
@@ -539,9 +542,9 @@ class SOUKLNABiasControlMonitor:
                                         estimate_v_remotes[c][-1]["v_remote"],
                                         "Lowest local voltage already exceeds desired remote voltage.",
                                     )
-                                elif abs(estimate_v_remotes[c][-1]["v_remote"] - v) < abs(
-                                    estimate_v_remotes[c][-2]["v_remote"] - v
-                                ):
+                                elif abs(
+                                    estimate_v_remotes[c][-1]["v_remote"] - v
+                                ) < abs(estimate_v_remotes[c][-2]["v_remote"] - v):
                                     actual_v_locals[c] = (
                                         estimate_v_remotes[c][-1]["v_remote"],
                                         "",
