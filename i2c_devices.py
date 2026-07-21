@@ -2,8 +2,8 @@ from smbus2 import SMBus
 import logging
 import time
 
-RETRY_DELAY_SECONDS = 0.25
-MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 0.5
+MAX_RETRIES = 5
 
 
 class I2CDeviceError(OSError):
