@@ -1,3 +1,4 @@
+import time
 from typing import Literal
 from dataclasses import dataclass
 from i2c_devices import I2CDevice
@@ -89,6 +90,7 @@ class TCA9548(I2CDevice):
             raise ValueError("channel must be between 0 and 7")
         new_config_byte = self.channel_config.config_byte | (1 << channel)
         self.write(new_config_byte)
+        time.sleep(0.1)  # Allow time for the channel to be enabled
         self.update_channel_config()
         return self.channel_config
 
