@@ -610,6 +610,53 @@ def read_set_local_voltage_demo(
             souk_lna_monitor.disable_lna_bias_output(chn=chn_idxes)
 
 
+def read_set_local_voltage_standalone(
+    souk_lna_monitor: SOUKLNABiasControlMonitor,
+    chn_idxes: List[int],
+    v_local: float,
+    disable_output: bool = False,
+) -> None:
+    import math
+
+    lna_local_range = souk_lna_monitor.lna_local_voltage_ranges
+    for chn in chn_idxes:
+        v_min, v_max = lna_local_range[chn]
+        if any(math.isnan(v_range) for v_range in (v_min, v_max)):
+            logging.info(f"Skipping LNA chn {chn} as it is not configured.")
+            continue
+        else:
+            logging.info(
+                f"LNA chn {chn} local voltage range: {v_min:.3f} V - {v_max:.3f} V"
+            )
+        if not isinstance(v_local, float) or not (v_min <= v_local <= v_max):
+            logging.error(
+                f"Provided v_local {v_local} V is out of range for LNA chn {chn}."
+            )
+            if disable_output:
+                logging.info(f"Disabling LNA chn {chn} output.")
+                souk_lna_monitor.disable_lna_bias_output(chn=chn)
+            continue
+        else:
+            actual_v_set = souk_lna_monitor.set_lna_bias_local(chn=chn, v_local=v_local)
+            logging.info(
+                f"Set LNA chn {chn} local voltage to {v_local:.3f} V, actual: {actual_v_set[chn]:.3f} V"
+            )
+
+            souk_lna_monitor.enable_lna_bias_output(chn=chn)
+            time.sleep(AWAIT_TURN_ON_DELAY)
+
+            status = souk_lna_monitor.read_lna_status(chn=chn)
+            logging.info(
+                f"LNA chn {chn} status after enable output: Remote Voltage = {status[chn]['remote voltage']:.3f} V, "
+                + f"Local Voltage = {status[chn]['local voltage']:.3f} V, "
+                + f"Bias Current = {status[chn]['bias current'] * 1e3:.3f} mA"
+                + f"Output Enable = {status[chn]['output enable']}"
+            )
+            if disable_output:
+                logging.info(f"Disabling LNA chn {chn} output.")
+                souk_lna_monitor.disable_lna_bias_output(chn=chn_idxes)
+
+
 def main():
     import argparse
     from datetime import datetime
@@ -620,7 +667,7 @@ def main():
         "--channels",
         type=int,
         nargs="+",
-        default=[1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14],  # 9 disabled
+        default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         help="List of LNA channel indices to monitor, starting index 1",
     )
     parser.add_argument(
@@ -637,7 +684,7 @@ def main():
     parser.add_argument(
         "--value",
         type=float,
-        default=1.2,
+        default=None,
         help="Voltage value for setting remote voltage demo",
     )
     # hardware version 2 confict with non blind mode, so disable blind mode for now
@@ -662,6 +709,10 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Require --value when --remote is used, but allow --local without a value
+    if args.remote and args.value is None:
+        parser.error("--value is required when using --remote")
 
     now = datetime.now()
     datetime_str = now.strftime("%Y-%m-%d_%H-%M-%S")
@@ -717,7 +768,12 @@ def main():
     souk_lna_monitor = SOUKLNABiasControlMonitor(i2c_bus, hw_config)
 
     if args.local:
-        read_set_local_voltage_demo(souk_lna_monitor, args.channels)
+        if args.value is not None:
+            read_set_local_voltage_standalone(
+                souk_lna_monitor, args.channels, args.value, args.disable_output
+            )
+        else:
+            read_set_local_voltage_demo(souk_lna_monitor, args.channels)
     if args.disable_output:
         souk_lna_monitor.disable_lna_bias_output(args.channels)
         logging.info(f"Disabled LNA bias output for channels: {args.channels}")
